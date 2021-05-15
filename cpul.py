@@ -6,6 +6,7 @@ Written by Kevin Chen."""
 import time
 import threading
 import copy
+import os, sys
 
 
 # Constants
@@ -24,6 +25,13 @@ class Exit(Exception):
 class Interrupt(Exception):
 
 	"""Interrupt exception. This is to be raised when a system interrupt is called."""
+
+	pass
+
+
+class SysError(Exception):
+
+	"""The system error."""
 
 	pass
 
@@ -48,6 +56,73 @@ def getsize(datadescriptor):
 		return (15, "Not a supported destination type.")	
 
 	return (0, size)
+
+
+def clear():
+
+	"""Clear the screen."""
+
+	os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def write(string):
+
+	"""Write the string to standard out.
+	   Args: string -> the string to write"""
+
+	sys.stdout.write(string)
+	sys.stdout.flush()
+
+
+# Get the get char method
+
+def getcharswin(n):
+
+	"""Get N chars from standard input. (WINDOWS ONLY)"""
+
+	string = ""
+	i = 0
+	# Loop until we get N chars
+	while True:
+		c = msvcrt.getch()
+		string += str(c, ENCODING)
+		i += 1
+		if i == n:
+			break
+	return string
+
+
+def getcharsposix(n):
+
+	"""Get N chars from standard input. (POSIX Systems ONLY)"""
+	
+	fd = sys.stdin.fileno()
+	oldSettings = termios.tcgetattr(fd)
+	string = ""
+	i = 0
+	# Loop until we get N chars
+	while i <= n:
+		# Do some magic
+		try:
+			tty.setcbreak(fd)
+			answer = sys.stdin.read(1)
+			string += str(answer, ENCODING)
+		finally:
+			termios.tcsetattr(fd, termios.TCSADRAIN, oldSettings)
+			i += 1
+	# Return string
+	return string
+
+
+# Get the correct system's getchar method
+try:
+	# Check Windows
+	import msvcrt
+	getchars = getcharswin
+except:
+	# Use POSIX
+	import tty, termios
+	getchars = getcharsposix
 
 
 class Register:
@@ -684,6 +759,18 @@ class CPUCore:
 			destexitcode, msg = self.cpu.computer.memory.memorypartitions[('proc', memId)].set_bytes(srcdata, destoffset)
 			if destexitcode != 0:
 				return (destexitcode, msg)
+
+			# Update cores
+			for cid, cpu in self.cpu.cores.items():
+				if hasattr(cpu, 'processmemory'):
+					try:
+						if cpu.pname[1] == self.pname[1]:
+							cpu.processmemory.data = self.cpu.computer.memory.memorypartitions[('proc', memId)].data
+					except Exception:
+						pass
+			# Update process processmemory
+			self.cpu.computer.operatingsystem.processes[self.pname[1]].data = self.cpu.computer.memory.memorypartitions[('proc', memId)].data
+			return (0, None)
 		else:
 			return (15, "Not a supported destination type.")
 
@@ -1308,7 +1395,7 @@ class CPUCore:
 		         n -> number of bytes to pop"""
 
 		n = self.handle_output(self.get(n))
-		exitcode, data = self.processmemory.popn_stack()
+		exitcode, data = self.processmemory.popn_stack(n)
 		# Update the memory
 		self.cpu.memory.edit_memory_partition(self.pname, self.processmemory)
 		self.cpu.computer.memory.edit_memory_partition(self.pname, self.processmemory)
@@ -2390,7 +2477,7 @@ class OperatingSystem:
 				if cpu.pname == ('proc', pid):
 					# Update this CPU core
 					self.computer.cpu.cores[cid].processmemory.data = self.processes[pid].processmemory.data
-			except:
+			except Exception:
 				pass
 
 	def halt_thread(self, pid, tid, exitcode):
@@ -2424,7 +2511,7 @@ class OperatingSystem:
 					try:
 						if cpu.pname == ('proc', pid) and cpu.tid == tid:
 							ready = False
-					except:
+					except Exception:
 						pass
 				if ready:
 					break
@@ -2433,6 +2520,7 @@ class OperatingSystem:
 			
 			# Run the system call (NOTE: all syscalls must call update_process_memory_global after modifying memory)
 			# NOTE: All system calls must modify memory in the processes memory data, not global memory data. Using the method update_process_memory_global, memory can be synced up with all processes. 
+			
 			if syscallid == 0:
 				# Terminate with exitcode in RBX
 				s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
@@ -2475,13 +2563,14 @@ class OperatingSystem:
 					try:
 						if cpu.pname == ('proc', pid) and cpu.tid == tid:
 							ready = False
-					except:
+					except Exception:
 						pass
 				if ready:
 					break
 
 			# Run the interrupt (NOTE: all interrupts must call update_process_memory_global after modifying memory)
 			# NOTE: All interrupt calls must modify memory in the processes memory data, not global memory data. Using the method update_process_memory_global, memory can be synced up with all processes. 
+
 			# Call the interrupt
 			exitcode = self.computer.interrupt(iid, pid, tid)
 			# Update memory in process
@@ -2590,9 +2679,17 @@ class OperatingSystem:
 
 		"""Begin the operating system."""
 
-		# Initialize all peripherals
+		self.terminalID = None
+
+		# Initialize all peripherals and find a terminal
 		for peripheral_id, peripheral in self.computer.peripherals.items():
 			peripheral.start(peripheral_id)
+			# Check if the peripheral is a terminal screen
+			if type(peripheral) == TerminalScreen:
+				self.terminalID = peripheral_id
+
+		if self.terminalID == None:
+			raise SysError("No terminal found.")
 
 		# Start the process main loop
 		self.process_mainloop()
@@ -2668,35 +2765,6 @@ class Peripheral:
 		...
 
 
-class DisplayerTest(Peripheral):
-
-	"""A temporary class to serve as a displayer peripheral."""
-
-	defined_interrupts = [0x64]
-
-	def start(self, pid):
-
-		"""Run starting or initialization protocols.
-		   Args: pid -> peripheral ID"""
-
-		self.pid = pid
-		self.computer.memory.add_memory_partition(('perp', self.pid), MemorySection('displayer_data', 10, b' ' * 10))
-
-	def end(self):
-
-		"""Run ending protocols."""
-
-		del self.pid
-
-	def handle(self, iid, pid, tid):
-
-		if iid == 0x64:
-			# print
-			# get the data
-			data = self.computer.memory.memorypartitions[('perp', self.pid)].data
-			print(str(data, ENCODING))
-			return (0, None)
-
 class FPU:
 
 	pass
@@ -2727,6 +2795,7 @@ class Process:
 		stack = self.threads[tid].stack
 		newpm = copy.deepcopy(self.processmemory)
 		newpm.stack = stack
+		newpm.es = newpm.ss + len(newpm.stack.data)
 
 		return newpm
 
@@ -2806,59 +2875,205 @@ class PThread:
 		return self.__repr__()
 
 
+class TerminalScreen(Peripheral):
+
+	"""The terminal screen class."""
+
+	defined_interrupts = [0xe0, 0xe1, 0xe2]
+
+	def __init__(self, computer):
+
+		"""Create the terminal."""
+
+		self.computer = computer
+
+	def start(self, pid):
+
+		"""Start the terminal.
+		   Args: pid -> peripheral ID"""
+
+		self.pid = pid
+
+		# Get screen size
+		size = os.get_terminal_size()
+		self.rows = size.lines
+		self.cols = size.columns
+		
+		# Create the designated memory for the terminal's printout
+		self.computer.memory.add_memory_partition(('perp', self.pid), MemorySection('terminal_perp_' + str(self.pid), self.rows * self.cols + self.rows, bytes(self.rows * self.cols + self.rows)))
+
+	def end(self):
+
+		"""Run ending protocols."""
+
+		# Remove the designated memory for the terminal's printout
+		self.computer.memory.delete_memory_partition(('perp', self.pid))
+
+		del self.pid
+		del self.rows
+		del self.cols
+
+	def handle(self, iid, pid, tid):
+
+		"""Handle the interrupt.
+		   Args: iid -> the interrupt ID
+		         pid -> the process ID
+		         tid -> the thread ID"""
+
+		if iid == 0xe0:
+			# Update the screen with the new buffer
+			return self.update_screen()
+		elif iid == 0xe1:
+			# Get one char and save it to RAX
+			char = getchars(1)
+			# Place the char in RAX
+			self.computer.operatingsystem.processes[pid].threads[tid].registers['RAX'].data[0] = ord(char)
+			return (0, None)
+		elif iid == 0xe2:
+			# Get a number of chars (as specified in RAX) and put them into stack
+			nchars = int.from_bytes(self.computer.operatingsystem.processes[pid].threads[tid].registers['RAX'].data[0 : 4], byteorder='little')
+			chars = getchars(nchars)
+			# Place the chars
+			self.computer.operatingsystem.processes[pid].threads[tid].stack.push(bytes(chars, ENCODING))
+			# Recalculate RES
+			self.computer.operatingsystem.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.computer.operatingsystem.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+			return (0, None)
+	
+	def update_screen(self):
+
+		"""Update the data buffer to the screen."""
+
+		# Clear the terminal
+		clear()
+
+		# Get a variable for the data
+		data = str(self.computer.memory.memorypartitions[('perp', self.pid)].data.replace(b'\x00', b''), ENCODING)
+
+		# Cut the data off if there are too many newlines
+		if data.count('\n') + 1 > self.rows:
+			# Too many lines, so cut some off
+			split_data = data.split('\n')
+			new_data = []
+			# Iterate over each line, reversed
+			for line in reversed(split_data):
+				# Add the line
+				new_data.append(line)
+				# If there are too many lines
+				if len(new_data) >= self.rows:
+					break
+
+			# Join the new data
+			data = '\n'.join(new_data)
+
+		# Print the data
+		write(data)
+
+		return (0, None)
+
+
 class Terminal:
 
-	"""The terminal class. Has a shell, which can cause different commands to be run. These will display the processes STDOut and input the STDIn."""
+	"""The base class for a terminal or console display."""
 
-	pass
+	def __init__(self, computer):
 
-class ConsoleDisplay:
+		"""Create the terminal.
+		   Args: computer -> the computer the terminal is attached to"""
 
-	"""The base class for a console display."""
+		self.computer = computer
+		self.operatingsystem = self.computer.operatingsystem
 
-	def __init__(self, computer, ):
-
-		"""Create the console."""
-
-		pass
+		self.data = bytearray()
 
 	def set_view(self, pid):
 
-		pass
+		"""Set the display to view a specific PID's STDOut.
+		   Args: pid -> process ID to view"""
+
+		self.pid_view = pid
+		self.stdout = self.operatingsystem.processes[pid].stdout
+
+		self.notify_change()
+
+	def notify_change(self):
+
+		"""Notify that the STDOut changed."""
+
+		
 
 
 class STDOut:
 
 	"""The basic standard output class. Each process gets a standard output handle. The output gets mapped into the terminal/console."""
 
-	def __init__(self, pid):
+	def __init__(self):
 
 		"""Create the standard output."""
 
-		self.pid = pid
 		self.data = bytearray()
 
-	def set_data(self, data):
+	def write(self, data, terminal):
 
-		"""Set the data for the output stream."""
+		"""Write data into the output stream, and notify the attached terminal.
+		   Args: data -> data to add
+		         terminal -> terminal to notify"""
 
-		self.data = data
+		# Add each character, handling backspaces
+		for char in data:
+			# Check for a backspace
+			if char == '\b':
+				# Delete the last char
+				self.data = self.data[ : -1]
+			else:
+				# Add the char
+				self.data += char
 
-	def write(self, data):
+		# Notify the terminal
+		terminal.notify_change()
 
-		"""Write data into the output stream."""
+		return (0, None)
 
-		self.data += data
+	def set_data(self, data, terminal):
+
+		"""Set data for the output stream, and notify the attached terminal.
+		   Args: data -> data to add
+		         terminal -> terminal to notify"""
+
+		self.data = bytearray()
+
+		# Add each character, handling backspaces
+		for char in data:
+			# Check for a backspace
+			if char == '\b':
+				# Delete the last char
+				self.data = self.data[ : -1]
+			else:
+				# Add the char
+				self.data += char
+
+		# Notify the terminal
+		terminal.notify_change()
+
+		return (0, None)
 
 	def pipe(self):
 
 		"""Pipe/return the output stream."""
 
-		return self.data
+		return (0, self.data)
 
 class STDIn:
 
 	"""The basic standard input class."""
+
+	def __init__(self, pid):
+
+		"""Create the standard input.
+		   Args: pid -> the process ID the input stream is attached to"""
+
+class STDErr:
+
+	"""The basic standard error class. (Saved to a file)"""
 
 
 print('CREATING CODE')
@@ -2877,7 +3092,10 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # This code also calls system interrupt 02 but dosen't do anything else
 # code = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x02\x00\x00\x00$')
 # This code puts "Hello!" into peripheral 1's memory
-code = b'\x00\x04\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x06\x01\x02\x04\x00\x00\x00+\x00\x00\x00\x02\x01\x00\x00\x00\x06(\x02\x01\x00\x00\x00d'
+# code = b'\x00\x04\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x06\x01\x02\x04\x00\x00\x00+\x00\x00\x00\x02\x01\x00\x00\x00\x06(\x02\x01\x00\x00\x00\xe0'
+# This code calls interrupt e0 and e1 and puts RAX into the stack
+code = bytearray(b'\x00\x04\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x06\x02\x06\x00\x00\x00Hello!(\x02\x01\x00\x00\x00\xe0(\x02\x01\x00\x00\x00\xe1\x0b\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04')
+
 # code2 = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
@@ -2892,8 +3110,8 @@ print("CREATING COMPUTER")
 computer = Computer()
 computer.set_memory(memory)
 operatingsystem = OperatingSystem(computer)
-testwriter = DisplayerTest(computer)
-computer.add_peripheral(testwriter)
+terminalscreen = TerminalScreen(computer)
+computer.add_peripheral(terminalscreen)
 computer.set_os(operatingsystem)
 print()
 print("CREATING CPU")
@@ -2925,19 +3143,19 @@ pid2 = computer.operatingsystem.process_create(p2)[1]
 print()
 print('RUNNING PROCESS')
 
-computer.operatingsystem.process_await(pid2)
+computer.operatingsystem.process_await(pid)
 print()
 print('FINISHED PROCESS')
 print()
 print(computer.operatingsystem.processes)
-print(computer.memory.memorypartitions[('proc', 1)].stack.data)
-print(computer.memory.memorypartitions[('proc', 1)].data.data)
+print(computer.memory.memorypartitions[('proc', 0)].stack.data)
+print(computer.memory.memorypartitions[('proc', 0)].data.data)
 # computer.operatingsystem.process_await(pid2)
 # print(computer.operatingsystem.processes[1].threads[0].output)
 # print(computer.memory.memorypartitions[('proc', 1)].stack.data)
-print(computer.operatingsystem.processes[1].output)
-computer.operatingsystem.process_await(pid)
-print(computer.operatingsystem.processes)
-print(computer.operatingsystem.processes[0].processmemory.stack.data)
 print(computer.operatingsystem.processes[0].output)
+computer.operatingsystem.process_await(pid2)
+print(computer.operatingsystem.processes)
+print(computer.operatingsystem.processes[1].processmemory.stack.data)
+print(computer.operatingsystem.processes[1].output)
 computer.operatingsystem.stop_os()

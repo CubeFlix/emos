@@ -849,17 +849,29 @@ class Compiler:
 # SYS
 # '''
 
-code = '''# Print to Peripheral 1
+# code = '''# Print to Peripheral 1
+# 
+# [.data] 
+# [hello] ["Hello!"]
+# 
+# [.code]
+# 
+# MOV PERP[[0x0], [0x0] : [0x6]], MEM[SYM[hello] : [0x6]]
+# INT [0x64]
+# 
+# '''
 
-[.data] 
-[hello] ["Hello!"]
+code = '''# Get Character from Terminal Screen
 
-[.code]
+MOV PERP[[0x0], [0x0] : [0x6]], ["Hello!"]
+INT [0xe0]
 
-MOV PERP[[0x0], [0x0] : [0x6]], MEM[SYM[hello] : [0x6]]
-INT [0x64]
+INT [0xe1]
+
+PUSH REG[RAX, [0x0] : [0x4]]
 
 '''
+
 # code = '''
 # # Displays "Hello, world!" to stack.
 # 
