@@ -8,7 +8,7 @@ REGISTER_NAMES = ['RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI', 'RIP',
 CHARS_HEX = '0123456789abcdefABCDEF'
 CHARS_DEC = '0123456789'
 MNEMONIC_LIST = ['MOV', 'ADD', 'SUB', 'MUL', 'SMUL', 'DIV', 'SDIV', 'AND', 'OR', 'XOR', 'NOT', 'PUSH', 'POP', 'ADDF', 'SUBF', 'MULF', 'SMULF', 'DIVF', 'SDIVF', 'ANDF', 'ORF', 'XORF', 'NOTF', 'JMP', 'CMP', 'SCMP', 'JL', 'JG',
-				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT']
+				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN']
 
 class ParseError(Exception):
 
@@ -349,7 +349,7 @@ class Compiler:
 					current_bit = int.to_bytes(int(current_dec), nbytes, byteorder='little')
 					data += current_bit
 				# Check for a 'XX' bit for 4-bit decimal
-				elif self.scan_chars(2).isnumeric():
+				elif self.scan_chars(2).isnumeric() or (self.scan_chars(2)[0].isnumeric() and not self.scan_chars(2)[1] in ('x', 'd')):
 					# Get the number
 					num = int(self.parse_until_non_numeric())
 					data += int.to_bytes(num, 4, byteorder='little')
@@ -808,9 +808,45 @@ class Compiler:
 # # Function 1
 # 
 # # Get argument 1
-# SUB REG[RBP, [0x4]: [0x4]], [4d4], REG[RSI, [0x4] : [0x4]]
+# SUB REG[RBP, [0x4]: [0x4]], [4d12], REG[RSI, [0x4] : [0x4]]
 # # Add one to the argument
 # ADD MEM[REG[RSI, [0x4] : [0x4]] : [0x4]], [0x1], MEM[SYM[return] : [0x4]]
+# 
+# # Return
+# RET
+# 
+# '''
+
+# code = '''# Functions test 3
+# [.data]
+# 
+# [return] [4d0]
+# 
+# [.code]
+# 
+# [main]
+# # Main beginning code
+# 
+# # Prepare variables for function 1
+# PUSH [4d4]
+# 
+# # Call the function
+# CALL SYM[func1]
+# 
+# # Remove our argument
+# POP REG[RAX, [0x0] : [0x4]]
+# 
+# # Halt the processor
+# HLT [0x0]
+# 
+# [func1]
+# # Function 1
+# 
+# # Get argument 1
+# ARGN MEM[SYM[return] : [4]], [0]
+# 
+# # Modify the value
+# ADD MEM[SYM[return] : [4]], [1], MEM[SYM[return] : [4]]
 # 
 # # Return
 # RET
@@ -861,16 +897,16 @@ class Compiler:
 # 
 # '''
 
-code = '''# Get Character from Terminal Screen
-
-MOV PERP[[0x0], [0x0] : [0x6]], ["Hello!"]
-INT [0xe0]
-
-INT [0xe1]
-
-PUSH REG[RAX, [0x0] : [0x4]]
-
-'''
+# code = '''# Get Character from Terminal Screen
+# 
+# MOV PERP[[0x0], [0x0] : [0x6]], ["Hello!"]
+# INT [0xe0]
+# 
+# INT [0xe1]
+# 
+# PUSH REG[RAX, [0x0] : [0x4]]
+# 
+# '''
 
 # code = '''
 # # Displays "Hello, world!" to stack.
@@ -892,7 +928,8 @@ a = Compiler(code)
 # asd REG[RAX, [2d4] : [0x1]], MEM[[0x1] : [0x3]]''')
 try:
 	a.parse()
-except:
+except Exception as e:
+	print(e)
 	print(a.code)
 a.compile()
 print(a.compiled)

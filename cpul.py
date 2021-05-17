@@ -230,8 +230,8 @@ class MemorySection:
 		if self.size < 4:
 			# Size is less than 4
 			return (3, "Stack is not large enough.")
-		data = self.data[0 : 4]
-		del self.data[0 : 4]
+		data = self.data[-4 : ]
+		del self.data[-4 : ]
 		self.size -= 4
 		return (0, data)
 
@@ -239,7 +239,7 @@ class MemorySection:
 
 		"""Push bytes onto the memory."""
 
-		self.data = data + self.data
+		self.data = self.data + data
 		self.size += len(data)
 		return (0, None)
 
@@ -251,8 +251,8 @@ class MemorySection:
 		if self.size < n:
 			# Size is less than n
 			return (3, "Stack is not large enough.")
-		data = self.data[0 : n]
-		del self.data[0 : n]
+		data = self.data[-n : ]
+		del self.data[-n : ]
 		self.size -= n
 		return (0, data)
 
@@ -1446,6 +1446,21 @@ class CPUCore:
 		raise Interrupt()
 		# No need to return, as the interrupt stops execution anyway
 
+	def argn(self, dest, argnum):
+
+		"""Get argument argnum from the stack, moving it to dest.
+		   Args: dest -> destination to move the argument to
+		         argnum -> the argument number to move"""
+
+		# Get the argument number
+		argnum = int.from_bytes(self.handle_output(self.get(argnum)), byteorder='little')
+		# Get the position for the argument
+		offset = int.from_bytes(self.registers['RBP'].data[4 : 8], byteorder='little') - (8 + 4 * (argnum + 1))
+		if offset < self.processmemory.ss:
+			return (2, "Offset not in stack range.")
+		# Move the data
+		return self.move(dest, ('mem', (int.to_bytes(offset, 4, byteorder='little'), b'\x04')))
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
@@ -1488,7 +1503,8 @@ class CPUCore:
 				   37 : (popn, 2, {}),
 				   38 : (pushn, 1, {}),
 				   39 : (inf_loop, 0, {}),
-				   40 : (interrupt, 1, {})}
+				   40 : (interrupt, 1, {}),
+				   41 : (argn, 2, {})}
 
 
 	def inc_rip(self, val):
@@ -2222,6 +2238,9 @@ class OperatingSystem:
 		# Maximum number of operations to run on each thread if no IO is involved
 		self.max_operations_per_thread = 100
 
+		# Terminal
+		self.terminal = Terminal(self.computer)
+
 	def set_max_thread_operations(self, max_operations_per_thread):
 
 		"""Set the maximum number of operations each thread gets to run per iteration, if no IO is involved.
@@ -2522,12 +2541,18 @@ class OperatingSystem:
 			# NOTE: All system calls must modify memory in the processes memory data, not global memory data. Using the method update_process_memory_global, memory can be synced up with all processes. 
 			
 			if syscallid == 0:
-				# Terminate with exitcode in RBX
+				# Terminate with exit code in RBX
 				s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
 				exitcode = self.halt_thread(pid, tid, s_exitcode)
 			elif syscallid == 1:
-				# Temp: Wait 2 sec
-				time.sleep(2)
+				# Write to the processes STDOut with the beginning offset in RBX, and the length in RCX
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				data = processmemroy_use.get_bytes(begin_offset, length)
+				# Write the data to the STDOut
+				self.processes[pid].stdout.write(data, self.terminal)
 				exitcode = (0, None)
 			elif syscallid == 2:
 				# Temp: get one char
@@ -2691,6 +2716,9 @@ class OperatingSystem:
 		if self.terminalID == None:
 			raise SysError("No terminal found.")
 
+		# Start the terminal
+		self.terminal.start()
+
 		# Start the process main loop
 		self.process_mainloop()
 
@@ -2786,6 +2814,9 @@ class Process:
 		self.processmemory = processmemory
 		self.threads = threads
 		self.state = state
+
+		self.stdout = STDOut()
+		self.stdin = STDIn()
 
 	def get_processmemory_thread(self, tid):
 
@@ -2981,25 +3012,96 @@ class Terminal:
 		   Args: computer -> the computer the terminal is attached to"""
 
 		self.computer = computer
-		self.operatingsystem = self.computer.operatingsystem
 
+		self.state = 'term'
 		self.data = bytearray()
+
+	def start(self):
+
+		"""Start the terminal."""
+
+		self.operatingsystem = self.computer.operatingsystem
+		self.terminalID = self.computer.operatingsystem.terminalID
 
 	def set_view(self, pid):
 
 		"""Set the display to view a specific PID's STDOut.
 		   Args: pid -> process ID to view"""
 
+		if pid not in self.operatingsystem.processes:
+			return (20, "PID dosen't exist.")
+
 		self.pid_view = pid
 		self.stdout = self.operatingsystem.processes[pid].stdout
+		self.stdin = self.operatingsystem.processes[pid].stdin
+		self.stdout.active = True
+		self.stdin.active = True
+		
+		self.state = 'proc'
 
 		self.notify_change()
 
+		return (0, None)
+
+	def remove_view(self):
+
+		"""Unset the display view from any PID's STDOut."""
+
+		# Add the final STDOut data to our data permanently
+		self.data += self.stdout.data
+
+		self.stdout.active = False
+		self.stdin.active = False
+
+		del self.pid_view
+		del self.stdout
+		del self.stdin
+
+		self.state = 'term'
+
+		self.notify_change()
+
+		return (0, None)
+
 	def notify_change(self):
 
-		"""Notify that the STDOut changed."""
+		"""Notify that the STDOut changed and update the terminal screen."""
 
-		
+		size_x = self.computer.peripherals[self.terminalID].cols
+		size_y = self.computer.peripherals[self.terminalID].rows
+
+		# Check for terminal or output mode
+		if self.state == 'term':
+			# Cut the data, and then write the data
+			# Cut the data
+			self.data = self.data[-(size_x * size_y + size_y) : ]
+			# Write the data
+			self.computer.memory.memorypartitions[('perp', self.terminalID)].set_data(self.data + bytes((size_x * size_y + size_y) - len(self.data)))
+			self.computer.peripherals[self.terminalID].update_screen()
+		elif self.state == 'proc':
+			# Write the data with the STDOut data and cut it too
+			# Add the STDOut data and cut the data
+			data = self.data + self.stdout.pipe()[1]
+			# Cut the data
+			data = data[-(size_x * size_y + size_y) : ]
+			# Write the data
+			self.computer.memory.memorypartitions[('perp', self.terminalID)].set_data(self.data + bytes((size_x * size_y + size_y) - len(self.data)))
+			self.computer.peripherals[self.terminalID].update_screen()
+
+		return (0, None)
+
+	def get_char(self):
+
+		"""Get one character from the terminal, without echoing."""
+
+		return (0, getchars(1))
+
+	def get_chars(self, n):
+
+		"""Get N characters from the terminal, without echoing.
+		   Args: n -> number of chars to get"""
+
+		return (0, getchars(n))
 
 
 class STDOut:
@@ -3011,6 +3113,7 @@ class STDOut:
 		"""Create the standard output."""
 
 		self.data = bytearray()
+		self.active = False
 
 	def write(self, data, terminal):
 
@@ -3021,15 +3124,16 @@ class STDOut:
 		# Add each character, handling backspaces
 		for char in data:
 			# Check for a backspace
-			if char == '\b':
+			if char == b'\b':
 				# Delete the last char
 				self.data = self.data[ : -1]
 			else:
 				# Add the char
 				self.data += char
 
-		# Notify the terminal
-		terminal.notify_change()
+		if self.active:
+			# Notify the terminal
+			terminal.notify_change()
 
 		return (0, None)
 
@@ -3044,15 +3148,16 @@ class STDOut:
 		# Add each character, handling backspaces
 		for char in data:
 			# Check for a backspace
-			if char == '\b':
+			if char == b'\b':
 				# Delete the last char
 				self.data = self.data[ : -1]
 			else:
 				# Add the char
 				self.data += char
 
-		# Notify the terminal
-		terminal.notify_change()
+		if self.active:
+			# Notify the terminal
+			terminal.notify_change()
 
 		return (0, None)
 
@@ -3062,14 +3167,38 @@ class STDOut:
 
 		return (0, self.data)
 
+
 class STDIn:
 
 	"""The basic standard input class."""
 
-	def __init__(self, pid):
+	def __init__(self):
 
-		"""Create the standard input.
-		   Args: pid -> the process ID the input stream is attached to"""
+		"""Create the standard input."""
+
+		self.active = False
+
+	def read(self, terminal):
+
+		"""Read from a terminal.
+		   Args: terminal -> terminal to read from"""
+
+		if self.active:
+			return terminal.get_char()
+		else:
+			return (24, "STDIn not attached to a terminal.")
+
+	def readn(self, n, terminal):
+
+		"""Read N characters from a terminal.
+		   Args: n -> number of characters to read
+		   		 terminal -> terminal to read from"""
+
+		if self.active:
+			return terminal.get_chars(n)
+		else:
+			return (24, "STDIn not attached to a terminal.")
+
 
 class STDErr:
 
@@ -3094,12 +3223,16 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # This code puts "Hello!" into peripheral 1's memory
 # code = b'\x00\x04\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x06\x01\x02\x04\x00\x00\x00+\x00\x00\x00\x02\x01\x00\x00\x00\x06(\x02\x01\x00\x00\x00\xe0'
 # This code calls interrupt e0 and e1 and puts RAX into the stack
-code = bytearray(b'\x00\x04\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x06\x02\x06\x00\x00\x00Hello!(\x02\x01\x00\x00\x00\xe0(\x02\x01\x00\x00\x00\xe1\x0b\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04')
-
+# code = bytearray(b'\x00\x04\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x06\x02\x06\x00\x00\x00Hello!(\x02\x01\x00\x00\x00\xe0(\x02\x01\x00\x00\x00\xe1\x0b\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04')
+# This code is a function test
+# code = bytearray(b'\x00\x01\x00\x05\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x04\x00\x00\x00"\x02\x04\x00\x00\x00?\x00\x00\x00\x0c\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04!\x02\x01\x00\x00\x00\x00\x02\x00\x05\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x0c\x00\x00\x00\x00\x06\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x01\x01\x00\x06\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x01\x01\x02\x04\x00\x00\x00\x92\x00\x00\x00\x02\x01\x00\x00\x00\x04#')
+# This code is a better function test
+code = bytearray(b'\x0b\x02\x04\x00\x00\x00\x04\x00\x00\x00"\x02\x04\x00\x00\x00*\x00\x00\x00\x0c\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04!\x02\x01\x00\x00\x00\x00)\x01\x02\x04\x00\x00\x00x\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x01\x01\x02\x04\x00\x00\x00x\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x01\x02\x04\x00\x00\x00x\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00#')
 # code2 = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
-processmemory = ProcessMemory(code, b'Hello!', b'')
+# processmemory = ProcessMemory(code, b'Hello!', b'')
+processmemory = ProcessMemory(code, b'\x00\x00\x00\x00', b'')
 processmemory2 = ProcessMemory(code2, b'\x00\x00\x00\x00', b'')
 print(processmemory)
 print()
