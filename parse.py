@@ -922,6 +922,46 @@ class Compiler:
 # HLT
 # '''
 
+# code = '''# Write "Hello, world!" to STDOut
+# [.data]
+# 
+# [msg] ["Hello, world!", 0xa]
+# 
+# [.code]
+# 
+# MOV REG[RAX, [0] : [4]], [1]
+# MOV REG[RBX, [0] : [4]], SYM[msg]
+# MOV REG[RCX, [0] : [4]], [14]
+# SYS
+# 
+# HLT [0x0]
+# 
+# '''
+
+code = '''# Write "Hello, world!" to STDOut and read one char from STDIn
+[.data]
+
+[msg] ["Hello, world!", 0xa]
+
+[.code]
+
+# Print "Hello, world!"
+
+MOV REG[RAX, [0] : [4]], [1]
+MOV REG[RBX, [0] : [4]], SYM[msg]
+MOV REG[RCX, [0] : [4]], [14]
+SYS
+
+# Read one char
+
+MOV REG[RAX, [0] : [4]], [2]
+MOV REG[RBX, [0] : [4]], [1]
+SYS
+
+HLT [0x0]
+
+'''
+
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
 # abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 
