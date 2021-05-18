@@ -2489,6 +2489,31 @@ class OperatingSystem:
 
 		return (0, None)
 
+	def run_executable_data(self, data):
+
+		"""Run executable data and load it, retuning the PID.
+		   Args: data -> data to run"""
+
+		# Get the beginning data offset
+		data_offset = int.from_bytes(data[0 : 4], byteorder='little')
+
+		# Split the data
+		data = data[4 : ]
+		# Get the code section
+		code_section = data[ : data_offset]
+		# Get the data section
+		data_section = data[data_offset : ]
+
+		# Create the process memory
+		processmemory = ProcessMemory(code_section, data_section, b'')
+
+		# Create the thread
+		thread = PThread(0, MemorySection('stack', 0, b''), None)
+
+		# Create process
+		process = Process(processmemory, {0 : thread}, 't')
+		return self.process_create(process, )
+
 	def update_process_memory_global(self, pid, tid):
 
 		"""Update process PID's process memory in processes from the memory. Updates all running processes CPU memory as well.
