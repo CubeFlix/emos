@@ -145,7 +145,7 @@ class Compiler:
 					continue
 				elif next_char == 'r':
 					# Add a line return
-					chars += '\r':
+					chars += '\r'
 					continue
 				# Else, add the next char and ignore it
 				chars += next_char
@@ -319,7 +319,6 @@ class Compiler:
 			# Get ':'
 			self.parse_through_whitespace_nonewline()
 			if self.next_char() != ':':
-				print(arg)
 				raise ParseError('Missing \':\'')
 			# Get ending position
 			self.parse_through_whitespace_nonewline()
@@ -504,6 +503,9 @@ class Compiler:
 				while True:
 					# Check if we get a newline
 					if not self.code or self.scan_char() == '\n':
+						break
+					elif self.scan_char() == '#':
+						self.parse_through_whitespace(allow_comments=True)
 						break
 					# Parse the arg
 					args.append(self.parse_arg())
@@ -950,29 +952,53 @@ class Compiler:
 # 
 # '''
 
-code = '''# Write "Hello, world!" to STDOut and read one char from STDIn
-[.data]
+# code = '''# Write "Hello, world!" to STDOut and read one char from STDIn
+# [.data]
+# 
+# [msg] ["Hello, world!", 0xa]
+# 
+# [.code]
+# 
+# # Print "Hello, world!"
+# 
+# MOV REG[RAX, [0] : [4]], [1]
+# MOV REG[RBX, [0] : [4]], SYM[msg]
+# MOV REG[RCX, [0] : [4]], [14]
+# SYS
+# 
+# # Read one char
+# 
+# MOV REG[RAX, [0] : [4]], [2]
+# MOV REG[RBX, [0] : [4]], [1]
+# SYS
+# 
+# HLT [0x0]
+# 
+# '''
 
-[msg] ["Hello, world!", 0xa]
+# code = '''# Print kevin\\b
+# 
+# [.data]
+# 
+# [msg] ["kevin\b"]
+# 
+# [.code]
+# 
+# MOV REG[RAX, [0] : [4]], [1]
+# MOV REG[RBX, [0] : [4]], SYM[msg]
+# MOV REG[RCX, [0] : [4]], [6]
+# SYS
+# 
+# HLT [0x0]
+# '''
 
+code = '''# Take input
 [.code]
 
-# Print "Hello, world!"
-
-MOV REG[RAX, [0] : [4]], [1]
-MOV REG[RBX, [0] : [4]], SYM[msg]
-MOV REG[RCX, [0] : [4]], [14]
+MOV REG[RAX, [0] : [4]], [3]
 SYS
 
-# Read one char
-
-MOV REG[RAX, [0] : [4]], [2]
-MOV REG[RBX, [0] : [4]], [1]
-SYS
-
-HLT [0x0]
-
-'''
+HLT[0x0]'''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
@@ -986,6 +1012,7 @@ except Exception as e:
 a.compile()
 print(a.compiled)
 print(a.data_index)
+print(a.code)
 
 
 

@@ -1394,7 +1394,7 @@ class CPUCore:
 		   Args: dest -> destination tuple
 		         n -> number of bytes to pop"""
 
-		n = self.handle_output(self.get(n))
+		n = int.from_bytes(self.handle_output(self.get(n)), byteorder='little')
 		exitcode, data = self.processmemory.popn_stack(n)
 		# Update the memory
 		self.cpu.memory.edit_memory_partition(self.pname, self.processmemory)
@@ -1621,6 +1621,8 @@ class CPUCore:
 			args = []
 			for arg in range(n_args):
 				args.append(self.handle_output(self.parse_argument()))
+			if n_args != len(args):
+				self.handle_output((25, "Not enough arguments."))
 			# Run the opcode
 			try:
 				self.handle_output(func(*([self] + args), **d_args))
@@ -1700,6 +1702,8 @@ class CPUCore:
 				self.output_exit = (self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 1)[0], str(e))
 		except Exception as e:
 			# Catch internal errors
+			import traceback
+			traceback.print_exc()
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
 			self.set(bytes([0xff]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([1]))))
@@ -2240,6 +2244,8 @@ class OperatingSystem:
 
 		# Terminal
 		self.terminal = Terminal(self.computer)
+		# Kernel STDOut
+		self.kernel_stdout = STDOut()
 
 	def set_max_thread_operations(self, max_operations_per_thread):
 
@@ -2566,6 +2572,17 @@ class OperatingSystem:
 				self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
 				# Modify the processes registers
 				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+				exitcode = (0, None)
+			elif syscallid == 3:
+				# Take input from the processes STDOut, echoing back. Puts the length of the data into RAX
+				exitcode, data = self.processes[pid].stdin.take_input(self.terminal)
+				if exitcode != 0:
+					exitcode = self.halt_thread(pid, tid, exitcode)
+				# Write the data in the stack
+				self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
+				# Modify the processes registers
+				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+				self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
 				exitcode = (0, None)
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
@@ -2997,8 +3014,14 @@ class TerminalScreen(Peripheral):
 			new_data = []
 			# Iterate over each line, reversed
 			for line in reversed(split_data):
-				# Add the line
-				new_data.append(line)
+				# Check if the line is too long
+				if len(line) > self.cols:
+					# Add two lines
+					new_data.append(line[ : self.cols])
+					new_data.append(line[self.cols : ])
+				else:
+					# Add the line
+					new_data.append(line)
 				# If there are too many lines
 				if len(new_data) >= self.rows:
 					break
@@ -3053,6 +3076,21 @@ class Terminal:
 
 		return (0, None)
 
+	def kernel_mode(self):
+
+		"""Set the display to view the kernel's STDOut."""
+
+		self.pid_view = None
+		self.stdout = self.operatingsystem.kernel_stdout
+		self.stdin = None
+		self.stdout.active = True
+
+		self.state = 'kern'
+
+		self.notify_change()
+
+		return (0, None)
+
 	def remove_view(self):
 
 		"""Unset the display view from any PID's STDOut."""
@@ -3061,7 +3099,8 @@ class Terminal:
 		self.data += self.stdout.data
 
 		self.stdout.active = False
-		self.stdin.active = False
+		if self.stdin != None:
+			self.stdin.active = False
 
 		del self.pid_view
 		del self.stdout
@@ -3097,6 +3136,14 @@ class Terminal:
 			# Write the data
 			self.computer.memory.memorypartitions[('perp', self.terminalID)].set_data(data + bytes((size_x * size_y + size_y) - len(data)))
 			self.computer.peripherals[self.terminalID].update_screen()
+		elif self.state == 'kern':
+			# Write the kernel STDOut to the screen
+			data = self.stdout.pipe()[1]
+			# Cut the data
+			data = data[-(size_x * size_y + size_y) : ]
+			# Write the data
+			self.computer.memory.memorypartitions[('perp', self.terminalID)].set_data(data + bytes((size_x * size_y + size_y) - len(data)))
+			self.computer.peripherals[self.terminalID].update_screen()
 
 		return (0, None)
 
@@ -3112,6 +3159,53 @@ class Terminal:
 		   Args: n -> number of chars to get"""
 
 		return (0, getchars(n))
+
+	def get_input(self):
+
+		"""Get input from the terminal, with echoing."""
+
+		# Check the state
+		if self.state in ('term', 'kern'):
+			# Get the standard input
+			input_data = input()
+			self.print_terminal(bytes(input_data, ENCODING))
+			return (0, input_data)
+
+		text = ""
+		# Iterate over each character in the input
+		while True:
+			# Get a character
+			char = getchars(1)
+			# Print the character
+			self.stdout.write(bytes(char, ENCODING), self)
+			# Add the character
+			if char == '\b':
+				text = text[-1 : ]
+			elif char in ('\r', '\n'):
+				break
+			else:
+				text += char
+
+		return (0, text)
+
+	def print_terminal(self, data):
+
+		"""Print to the terminal."""
+
+		# Add each character, handling backspaces
+		for char in data:
+			# Check for a backspace
+			if bytes([char]) == b'\b':
+				# Delete the last char
+				self.data = self.data[ : -1]
+			else:
+				# Add the char
+				self.data += bytes([char])
+
+		if self.state in ('term', 'kern'):
+			self.notify_change()
+
+		return (0, None)
 
 
 class STDOut:
@@ -3134,7 +3228,7 @@ class STDOut:
 		# Add each character, handling backspaces
 		for char in data:
 			# Check for a backspace
-			if char == b'\b':
+			if bytes([char]) == b'\b':
 				# Delete the last char
 				self.data = self.data[ : -1]
 			else:
@@ -3158,7 +3252,7 @@ class STDOut:
 		# Add each character, handling backspaces
 		for char in data:
 			# Check for a backspace
-			if char == b'\b':
+			if bytes([char]) == b'\b':
 				# Delete the last char
 				self.data = self.data[ : -1]
 			else:
@@ -3209,6 +3303,16 @@ class STDIn:
 		else:
 			return (24, "STDIn not attached to a terminal.")
 
+	def take_input(self, terminal):
+
+		"""Take input from a terminal, echoing back.
+		   Args: terminal -> terminal to take input from"""
+
+		if self.active:
+			return terminal.get_input()
+		else:
+			return (24, "STDIn not attached to a terminal.")
+
 
 class STDErr:
 
@@ -3241,12 +3345,17 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # This code prints "Hello, world!\n" to the STDOut
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00b\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
 # This code prints "Hello, world!\n" to STDOut and reads one character from STDIn
-code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x9f\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x9f\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x02\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
+# This code prints "kevin\b" to STDOut
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00b\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x06\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
+# Input test
+code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x03\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
+
 # code2 = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
 # processmemory = ProcessMemory(code, b'Hello!', b'')
-processmemory = ProcessMemory(code, b'Hello, world!\n', b'')
+processmemory = ProcessMemory(code, b'kevin\b', b'')
 processmemory2 = ProcessMemory(code2, b'\x00\x00\x00\x00', b'')
 print(processmemory)
 print()
@@ -3281,6 +3390,7 @@ print()
 print('RUNNING OPERATING SYSTEM')
 computer.operatingsystem.start_os()
 # time.sleep(0.1)
+computer.operatingsystem.terminal.print_terminal(b'STARTING PROCESS 0, DISPLAYING STDOUT\n')
 pid = computer.operatingsystem.process_create(p)[1]
 computer.operatingsystem.terminal.set_view(pid)
 pid2 = computer.operatingsystem.process_create(p2)[1]
