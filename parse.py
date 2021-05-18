@@ -135,6 +135,18 @@ class Compiler:
 					# Add a newline
 					chars += '\n'
 					continue
+				elif next_char == 'b':
+					# Add a backspace
+					chars += '\b'
+					continue
+				elif next_char == 't':
+					# Add a tab
+					chars += '\t'
+					continue
+				elif next_char == 'r':
+					# Add a line return
+					chars += '\r':
+					continue
 				# Else, add the next char and ignore it
 				chars += next_char
 				continue
