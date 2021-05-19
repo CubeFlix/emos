@@ -2512,7 +2512,7 @@ class OperatingSystem:
 
 		# Create process
 		process = Process(processmemory, {0 : thread}, 't')
-		return self.process_create(process, )
+		return self.process_create(process)
 
 	def update_process_memory_global(self, pid, tid):
 
@@ -2609,6 +2609,23 @@ class OperatingSystem:
 				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
 				self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
 				exitcode = (0, None)
+			elif syscallid == 4:
+				# Call a kernel panic
+				# Enter kernel terminal mode
+				self.terminal.kernel_mode()
+				# Get the error code in RBX
+				error_code = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				# Form the kernel data
+				data = ''
+				rows = self.computer.peripherals[self.terminalID].rows
+				cols = self.computer.peripherals[self.terminalID].cols
+				cent_text = ('KERNEL PANIC ERROR - ERROR CODE: ' + hex(error_code)).center(cols, '-')
+				text = ('-' * cols + '\n') * (rows // 2) + cent_text + ('-' * cols + '\n') * (rows // 2 - 1)
+				# Write to the kernel data
+				self.kernel_stdout.write(b'KERNEL PANIC - ERROR')
+				# Enter the infinite loop
+				while True: pass
+
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
 			# In case of errors, set the pidtid to not running/error
@@ -3306,6 +3323,7 @@ class STDIn:
 		"""Create the standard input."""
 
 		self.active = False
+		self.data = bytearray()
 
 	def read(self, terminal):
 
@@ -3313,9 +3331,15 @@ class STDIn:
 		   Args: terminal -> terminal to read from"""
 
 		if self.active:
-			return terminal.get_char()
+			if len(self.data) == 0:
+				return terminal.get_char()
+			else:
+				return chr(self.data.pop(0))
 		else:
-			return (24, "STDIn not attached to a terminal.")
+			if len(self.data) == 0:
+				return (24, "STDIn not attached to a terminal.")
+			else:
+				return chr(self.data.pop(0))
 
 	def readn(self, n, terminal):
 
@@ -3324,9 +3348,15 @@ class STDIn:
 		   		 terminal -> terminal to read from"""
 
 		if self.active:
-			return terminal.get_chars(n)
+			if len(self.data) < n:
+				return terminal.get_chars(n)
+			else:
+				return ''.join([self.read(terminal) for i in range(n)])
 		else:
-			return (24, "STDIn not attached to a terminal.")
+			if len(self.data) == 0:
+				return (24, "STDIn not attached to a terminal.")
+			else:
+				return ''.join([self.read(terminal) for i in range(n)])
 
 	def take_input(self, terminal):
 
