@@ -6,6 +6,7 @@ Written by Kevin Chen."""
 import time
 import threading
 import copy
+import string as _string
 import os, sys
 
 
@@ -85,7 +86,12 @@ def getcharswin(n):
 	# Loop until we get N chars
 	while True:
 		c = msvcrt.getch()
-		string += str(c, ENCODING)
+		if c == b'\x03':
+			raise KeyboardInterrupt()
+		try:
+			string += str(c, ENCODING)
+		except UnicodeDecodeError:
+			continue
 		i += 1
 		if i == n:
 			break
@@ -106,7 +112,12 @@ def getcharsposix(n):
 		try:
 			tty.setcbreak(fd)
 			answer = sys.stdin.read(1)
-			string += str(answer, ENCODING)
+			if answer == b'\x03':
+				raise KeyboardInterrupt()
+			try:
+				string += str(answer, ENCODING)
+			except UnicodeDecodeError:
+				continue
 		finally:
 			termios.tcsetattr(fd, termios.TCSADRAIN, oldSettings)
 			i += 1
