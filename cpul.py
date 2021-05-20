@@ -2618,7 +2618,7 @@ class OperatingSystem:
 				self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
 				# Modify the processes registers
 				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
-				self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
+				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
 				exitcode = (0, None)
 			elif syscallid == 4:
 				# Call a kernel panic
@@ -2642,15 +2642,15 @@ class OperatingSystem:
 				# Enter the infinite loop
 				exitcode = (0, None)
 				while True: pass
+			elif syscallid == 5:
+				exitcode = (0, None)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
 			# In case of errors, set the pidtid to not running/error
 			self.processes[pid].threads[tid].waiting = False
-			# Check for errors
-			if exitcode[0] != 0:
-				# Handle exitcode
-				self.halt_thread(pid, tid, exitcode[0])
+			# Handle exitcode
+			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(len(exitcode[0]), 4, byteorder='little')
 		except Exception as e:
 			import traceback # Temp
 			traceback.print_exc() # Temp
@@ -2690,7 +2690,7 @@ class OperatingSystem:
 			# Check for errors
 			if exitcode[0] != 0:
 				# Handle exitcode
-				self.halt_thread(pid, tid, exitcode[0])
+				self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(len(exitcode[0]), 4, byteorder='little')
 		except Exception as e:
 			import traceback # Temp
 			traceback.print_exc() # Temp
@@ -2877,6 +2877,18 @@ class Peripheral:
 		         tid -> the thread ID"""
 
 		...
+
+	def __repr__(self):
+
+		"""Get the string representation of the peripheral."""
+
+		return "<Peripheral>"
+
+	def __str__(self):
+
+		"""Get the string representation of the peripheral."""
+
+		return self.__repr__()
 
 
 class FPU:
@@ -3093,6 +3105,18 @@ class TerminalScreen(Peripheral):
 
 		return (0, None)
 
+	def __repr__(self):
+
+		"""Get the string representation of the peripheral."""
+
+		return "<TerminalScreen>"
+
+	def __str__(self):
+
+		"""Get the string representation of the peripheral."""
+
+		return self.__repr__()
+
 
 class Terminal:
 
@@ -3236,6 +3260,7 @@ class Terminal:
 			# Get a character
 			char = getchars(1)
 			# Add the character
+			orig_text = text
 			if char == '\b':
 				text = text[ : -1]
 			elif char in ('\r', '\n'):
@@ -3243,7 +3268,7 @@ class Terminal:
 			else:
 				text += char
 			# Print the character
-			if not (len(text) == 0 and char == '\b'):
+			if not (len(orig_text) == 0 and char == '\b'):
 				self.stdout.write(bytes(char, ENCODING), self)
 
 		return (0, text)
@@ -3266,6 +3291,18 @@ class Terminal:
 			self.notify_change()
 
 		return (0, None)
+
+	def __repr__(self):
+
+		"""Get the string representation of the terminal."""
+
+		return "<Terminal>"
+
+	def __str__(self):
+
+		"""Get the string representation of the terminal."""
+
+		return self.__repr__()
 
 
 class STDOut:
@@ -3331,6 +3368,18 @@ class STDOut:
 
 		return (0, self.data)
 
+	def __repr__(self):
+
+		"""Get the string representation of the STDOut."""
+
+		return "<STDOut>"
+
+	def __str__(self):
+
+		"""Get the string representation of the STDOut."""
+
+		return self.__repr__()
+
 
 class STDIn:
 
@@ -3385,6 +3434,18 @@ class STDIn:
 			return terminal.get_input()
 		else:
 			return (24, "STDIn not attached to a terminal.")
+
+	def __repr__(self):
+
+		"""Get the string representation of the STDIn."""
+
+		return "<STDIn>"
+
+	def __str__(self):
+
+		"""Get the string representation of the STDIn."""
+
+		return self.__repr__()
 
 
 class STDErr:
