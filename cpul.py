@@ -2662,6 +2662,18 @@ class OperatingSystem:
 				# Get the current TID and put it into RBX
 				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(tid, 4, byteorder='little')
 				exitcode = (0, None)
+			elif syscallid == 9:
+				# Kill a process with PID in RBX and exitcode in RCX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.process_terminate(s_pid)
+				self.processes[s_pid].output = (0, s_exitcode)
+			elif syscallid == 10:
+				# Kill a thread with PID in RBX, TID in RCX, and exitcode in RDI
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RDI'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.halt_thread(s_pid, s_tid, s_exitcode)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
