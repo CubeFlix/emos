@@ -3237,7 +3237,7 @@ class Terminal:
 			char = getchars(1)
 			# Add the character
 			if char == '\b':
-				text = text[-1 : ]
+				text = text[ : -1]
 			elif char in ('\r', '\n'):
 				break
 			else:
