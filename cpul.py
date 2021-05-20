@@ -2644,6 +2644,24 @@ class OperatingSystem:
 				# Enter the infinite loop
 				exitcode = (0, None)
 				while True: pass
+			elif syscallid == 5:
+				# Fork the current process
+				exitcode = self.process_fork(pid)
+				# Put the PID into RBX
+				self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[1], 4, byteorder='little')
+			elif syscallid == 6:
+				# Fork the current thread
+				exitcode = self.thread_fork(pid, tid)
+				# Put the TID into RBX
+				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(exitcode[1], 4, byteorder='little')
+			elif syscallid == 7:
+				# Get the current PID and put it into RBX
+				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(pid, 4, byteorder='little')
+				exitcode = (0, None)
+			elif syscallid == 8:
+				# Get the current TID and put it into RBX
+				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(tid, 4, byteorder='little')
+				exitcode = (0, None)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
