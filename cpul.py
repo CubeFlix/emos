@@ -2594,32 +2594,34 @@ class OperatingSystem:
 				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
 				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
 				if exitcode != 0:
-					exitcode = self.halt_thread(pid, tid, exitcode)
-				# Write the data to the STDOut
-				self.processes[pid].stdout.write(data, self.terminal)
-				exitcode = (0, None)
+					exitcode = (exitcode, None)
+				else:
+					# Write the data to the STDOut
+					exitcode = self.processes[pid].stdout.write(data, self.terminal)
 			elif syscallid == 2:
 				# Read from the processes STDOut with the length in RBX and save it to the thread's stack
 				length = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
 				exitcode, data = self.processes[pid].stdin.readn(length, self.terminal)
 				if exitcode != 0:
-					exitcode = self.halt_thread(pid, tid, exitcode)
-				# Write the data in the stack
-				self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
-				# Modify the processes registers
-				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
-				exitcode = (0, None)
+					exitcode = (exitcode, None)
+				else:
+					# Write the data in the stack
+					self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
+					# Modify the processes registers
+					self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+					exitcode = (0, None)
 			elif syscallid == 3:
 				# Take input from the processes STDOut, echoing back. Puts the length of the data into RAX
 				exitcode, data = self.processes[pid].stdin.take_input(self.terminal)
 				if exitcode != 0:
-					exitcode = self.halt_thread(pid, tid, exitcode)
-				# Write the data in the stack
-				self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
-				# Modify the processes registers
-				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
-				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
-				exitcode = (0, None)
+					exitcode = (exitcode, None)
+				else:
+					# Write the data in the stack
+					self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
+					# Modify the processes registers
+					self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
+					exitcode = (0, None)
 			elif syscallid == 4:
 				# Call a kernel panic
 				# Enter kernel terminal mode
@@ -2642,15 +2644,13 @@ class OperatingSystem:
 				# Enter the infinite loop
 				exitcode = (0, None)
 				while True: pass
-			elif syscallid == 5:
-				exitcode = (0, None)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
 			# In case of errors, set the pidtid to not running/error
 			self.processes[pid].threads[tid].waiting = False
 			# Handle exitcode
-			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(len(exitcode[0]), 4, byteorder='little')
+			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
 		except Exception as e:
 			import traceback # Temp
 			traceback.print_exc() # Temp
@@ -3483,7 +3483,11 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # This code prints "kevin\b" to STDOut
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00b\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x06\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
 # Input test
-code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x03\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x03\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
+# Hello, world!
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00p\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00')
+# Hello, world! sod
+code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00w\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$&\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00!\x02\x01\x00\x00\x00\x00')
 # Kernel panics
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 
@@ -3491,7 +3495,7 @@ code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
 # processmemory = ProcessMemory(code, b'Hello!', b'')
-processmemory = ProcessMemory(code, b'kevin\b', b'')
+processmemory = ProcessMemory(code, b'Hello, world!\n', b'')
 processmemory2 = ProcessMemory(code2, b'\x00\x00\x00\x00', b'')
 print(processmemory)
 print()

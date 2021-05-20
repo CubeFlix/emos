@@ -1000,14 +1000,28 @@ class Compiler:
 # 
 # HLT[0x0]'''
 
-code = '''# Kernel panic
+# code = '''# Kernel panic
+# 
+# [.code]
+# 
+# MOV REG[RAX, [0] : [4]], [4]
+# MOV REG[RBX, [0] : [4]], [0]
+# SYS
+# '''
+
+code = '''# Hello world!
+[.data]
+[msg] ["Hello, world!", 0xa]
 
 [.code]
 
-MOV REG[RAX, [0] : [4]], [4]
-MOV REG[RBX, [0] : [4]], [0]
+MOV REG[RAX, [0] : [4]], [1]
+MOV REG[RBX, [0] : [4]], SYM[msg]
+MOV REG[RCX, [0] : [4]], [14]
 SYS
-'''
+
+PUSHN REG[RAX, [0] : [1]]
+HLT [0x0]'''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
