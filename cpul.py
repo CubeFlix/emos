@@ -1347,7 +1347,7 @@ class CPUCore:
 
 		"""Halt the program."""
 
-		output = self.handle_output(self.get(output))[0]
+		output = int.from_bytes(self.handle_output(self.get(output)), byteorder='little')
 
 		self.running = False
 		self.output_exit = (output, None)
@@ -1358,7 +1358,7 @@ class CPUCore:
 			# Add the exitcode
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-			self.set(bytes([output]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([1]))))
+			self.set(int.to_bytes(output, 2, byteorder='little'), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 
 		return (output, None)
 
@@ -1545,7 +1545,7 @@ class CPUCore:
 			# Process memory 0 is exit code
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-			self.set(bytes([output[0]]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([1]))))
+			self.set(int.to_bytes(output[0], 2, byteorder='little'), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			# Exit
 			raise Exit(output[1])
 		else:
@@ -1647,7 +1647,7 @@ class CPUCore:
 			# Exitcode 0
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-			self.set(bytes([0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([1]))))
+			self.set(bytes([0, 0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			self.output_exit = (0, None)
 			self.running = False
 
@@ -1687,7 +1687,7 @@ class CPUCore:
 			# We have got to the end of the code
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-			self.set(bytes([0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([1]))))
+			self.set(bytes([0, 0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			self.output_exit = (0, None)
 
 		self.running = False
@@ -1710,14 +1710,14 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 1)[0], str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 2), byteorder='little'), str(e))
 		except Exception as e:
 			# Catch internal errors
 			import traceback
 			traceback.print_exc()
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-			self.set(bytes([0xff]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([1]))))
+			self.set(bytes([0xff, 0x0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			self.output_exit = (0xff, str(e))
 			self.running = False
 			self.error = True
@@ -1748,7 +1748,7 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 1)[0], str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 2), byteorder='little'), str(e))
 		except Exception as e:
 			# Catch internal errors
 			# Temp
@@ -1756,7 +1756,7 @@ class CPUCore:
 			traceback.print_exc()
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-			self.set(bytes([0xff]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([1]))))
+			self.set(bytes([0xff, 0x0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			self.output_exit = (0xff, str(e))
 			self.running = False
 			self.error = True
@@ -2549,7 +2549,7 @@ class OperatingSystem:
 
 		# Terminate the program with exitcode
 		self.processes[pid].threads[tid].output = (exitcode, None)
-		e_exitcode = self.processes[pid].threads[tid].stack.set_data(self.processes[pid].threads[tid].stack.data + bytes([exitcode]))
+		e_exitcode = self.processes[pid].threads[tid].stack.set_data(self.processes[pid].threads[tid].stack.data + int.to_bytes(exitcode, 2, byteorder='little'))
 		self.processes[pid].threads[tid].running = False
 		if not all([self.processes[pid].threads[t].running for t in self.processes[pid].threads]):
 			# All threads are done
@@ -2687,10 +2687,8 @@ class OperatingSystem:
 			self.update_process_memory_global(pid, tid)
 			# In case of errors, set the pidtid to not running/error
 			self.processes[pid].threads[tid].waiting = False
-			# Check for errors
-			if exitcode[0] != 0:
-				# Handle exitcode
-				self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(len(exitcode[0]), 4, byteorder='little')
+			# Handle exitcode
+			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
 		except Exception as e:
 			import traceback # Temp
 			traceback.print_exc() # Temp
