@@ -2674,6 +2674,18 @@ class OperatingSystem:
 				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
 				s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RDI'].get_bytes(0, 4)[1], byteorder='little')
 				exitcode = self.halt_thread(s_pid, s_tid, s_exitcode)
+			elif syscallid == 11:
+				# Delete a process from the records with the PID in RBX
+				# Get the PID from RBX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.process_delete(s_pid)
+			elif syscallid == 12:
+				# Delete a thread from the records with the PID in RBX and the TID RCX
+				# Get the PID from RBX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the TID from RCX
+				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.thread_delete(s_pid, s_tid)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
