@@ -2997,7 +2997,11 @@ class DynamicLibrary:
 
 		...
 
+		# Update process memory
 		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
+		# Exit
+		return (0, None)
+
 
 	def __del__(self):
 
