@@ -1009,19 +1009,35 @@ class Compiler:
 # SYS
 # '''
 
-code = '''# Hello world!
-[.data]
-[msg] ["Hello, world!", 0xa]
+# code = '''# Hello world!
+# [.data]
+# [msg] ["Hello, world!", 0xa]
+# 
+# [.code]
+# 
+# MOV REG[RAX, [0] : [4]], [1]
+# MOV REG[RBX, [0] : [4]], SYM[msg]
+# MOV REG[RCX, [0] : [4]], [14]
+# SYS
+# 
+# PUSHN REG[RAX, [0] : [1]]
+# HLT [0x0]'''
 
-[.code]
+code = '''# Call dymanic lib 1
 
-MOV REG[RAX, [0] : [4]], [1]
-MOV REG[RBX, [0] : [4]], SYM[msg]
-MOV REG[RCX, [0] : [4]], [14]
+MOV REG[RAX, [0] : [4]], [13]
+MOV REG[RBX, [0] : [4]], [0]
 SYS
 
-PUSHN REG[RAX, [0] : [1]]
-HLT [0x0]'''
+MOV REG[RAX, [0] : [4]], [14]
+# RBX already has the right value
+MOV REG[RCX, [0] : [4]], [0]
+SYS
+
+
+HLT REG[RAX, [0] : [4]]
+
+'''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 

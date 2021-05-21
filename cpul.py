@@ -2170,6 +2170,7 @@ class Computer:
 
 		"""Start up the computer."""
 
+		# TEMP
 		# self.bootload()
 
 	def add_peripheral(self, peripheral):
@@ -2257,6 +2258,9 @@ class OperatingSystem:
 		self.terminal = Terminal(self.computer)
 		# Kernel STDOut
 		self.kernel_stdout = STDOut()
+
+		# System libraries (TODO)
+		self.syslibs = []
 
 	def set_max_thread_operations(self, max_operations_per_thread):
 
@@ -2686,10 +2690,42 @@ class OperatingSystem:
 				# Get the TID from RCX
 				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
 				exitcode = self.thread_delete(s_pid, s_tid)
+			elif syscallid == 13:
+				# Import a system dynamic library to the current thread, putting the ID into RBX
+				# Get the LID (library ID) from RBX
+				s_lid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				# Find the LID
+				if s_lid < len(self.syslibs):
+					# Import the library
+					self.processes[pid].threads[tid].dynamic_libraries.append(self.syslibs[s_lid](self, pid, tid))
+					# Put the LID into RBX
+					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(self.processes[pid].threads[tid].dynamic_libraries) - 1, 4, byteorder='little')
+					exitcode = (0, None)
+				else:
+					# Invalid LID
+					exitcode = (27, "Library ID is invalid.")
+			elif syscallid == 14:
+				# Call an imported dynamic library, with the LID in RBX and the call ID in RCX
+				# Get the LID and call ID
+				s_lid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				s_call = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Call the library
+				if s_lid < len(self.processes[pid].threads[tid].dynamic_libraries):
+					# Get the library
+					lib = self.processes[pid].threads[tid].dynamic_libraries[s_lid]
+					if s_call in lib.defined_calls:
+						# Call the library
+						exitcode = self.processes[pid].threads[tid].dynamic_libraries[s_lid].handle(s_call)
+					else:
+						# Invalid call ID
+						exitcode = (28, "Call ID is invalid.")
+				else:
+					# Invalid LID
+					exitcode = (27, "Library ID is invalid.")
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
-			# In case of errors, set the pidtid to not running/error
+			# In case of errors, set the thread's waiting state to not running/error
 			self.processes[pid].threads[tid].waiting = False
 			# Handle exitcode
 			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
@@ -2881,9 +2917,6 @@ class Screen:
 class Compiler:
 	pass
 
-class IO:
-	pass
-
 class Peripheral:
 	
 	"""The base class for all peripherals."""
@@ -2892,7 +2925,8 @@ class Peripheral:
 
 	def __init__(self, computer):
 
-		"""Create the peripheral."""
+		"""Create the peripheral.
+		   Args: computer -> computer the peripheral is attached to"""
 
 		self.computer = computer
 
@@ -2927,6 +2961,59 @@ class Peripheral:
 	def __str__(self):
 
 		"""Get the string representation of the peripheral."""
+
+		return self.__repr__()
+
+
+class DynamicLibrary:
+
+	"""The base class for all dynamic libraries."""
+
+	defined_calls = []
+
+	def __init__(self, operatingsystem, pid, tid):
+
+		"""Create and start the dynamic library.
+		   Args: operatingsystem -> the operatingsystem the dynamic library is a part of
+		         pid -> the process ID the library is for
+		         tid -> the thread ID the library is for"""
+
+		self.operatingsystem = operatingsystem
+		self.pid = pid
+		self.tid = tid
+
+	def end(self):
+
+		"""Run ending protocols."""
+
+		del self.operatingsystem
+		del self.pid
+		del self.tid
+
+	def handle(self, call):
+
+		"""Handle a call.
+		   Args: call -> the call ID to run"""
+
+		...
+
+		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
+
+	def __del__(self):
+
+		"""Delete the library."""
+
+		self.end()
+
+	def __repr__(self):
+
+		"""Get the string representation of the library."""
+
+		return "<DynamicLibrary>"
+
+	def __str__(self):
+
+		"""Get the string representation of the library."""
 
 		return self.__repr__()
 
@@ -3030,6 +3117,8 @@ class PThread:
 		self.registers = registers
 		self.waiting = False
 		self.running = True
+
+		self.dynamic_libraries = []
 
 	def __repr__(self):
 
@@ -3493,6 +3582,24 @@ class STDErr:
 	"""The basic standard error class. (Saved to a file)"""
 
 
+# TEMP
+class TestLib(DynamicLibrary):
+
+	defined_calls = [0]
+
+	"""Testing library"""
+
+	def handle(self, call):
+
+		"""Handle a call.
+		   Args: call -> the call ID to run"""
+
+		self.operatingsystem.processes[self.pid].stdout.write(b'Hello, world!\n', self.operatingsystem.terminal)
+
+		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
+		return (0, None)
+
+
 print('CREATING CODE')
 print()
 # This code counts to 100 (chr 'd') in the DATA section
@@ -3527,10 +3634,13 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # Hello, world!
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00p\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00')
 # Hello, world! sod
-code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00w\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$&\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00!\x02\x01\x00\x00\x00\x00')
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00w\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$&\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00!\x02\x01\x00\x00\x00\x00')
 # Kernel panics
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
-
+# Create library 0
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
+# Create and run library 0
+code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # code2 = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
