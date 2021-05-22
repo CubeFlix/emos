@@ -3654,22 +3654,41 @@ class STDErr:
 	"""The basic standard error class. (Saved to a file)"""
 
 
-# TEMP
-class TestLib(DynamicLibrary):
+class IOLIB(DynamicLibrary):
 
 	defined_calls = [0]
 
-	"""Testing library"""
+	# Print from process memory (length required)
+	# Print from process memory (null-terminated)
+	# Print from heap memory (length required)
+	# Print from heap memory (null-terminated)
+	# Get chars (length in RBX) into stack
+	# Get input into stack (length put into RBX)
+
+	"""I/O (Input/Output) tools library."""
 
 	def handle(self, call):
 
 		"""Handle a call.
 		   Args: call -> the call ID to run"""
 
+		if call == 0:
+			# Write from the process memory
+			self.operatingsystem.syscall
+
 		self.operatingsystem.processes[self.pid].stdout.write(b'Hello, world!\n', self.operatingsystem.terminal)
 
 		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
 		return (0, None)
+
+class MEMLIB(DynamicLibrary):
+
+	defined_calls = [0]
+
+	# Allocate memory (ID put into RBX)
+	# Free memory (ID in RBX)
+
+	"""Memory tool library."""
 
 
 print('CREATING CODE')

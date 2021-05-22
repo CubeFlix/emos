@@ -20,12 +20,17 @@ class Compiler:
 
 	"""Compiles code."""
 
-	def __init__(self, code):
+	def __init__(self, code, filesys='comp', emos=None):
 
 		"""Create the Compiler.
-		   Args: code -> code to parse"""
+		   Args: code -> code to parse and compile
+		         filesys -> the file system to load other files from. 'comp' is for computer, and 'emos' is for EMOS. 
+		         emps -> the operating system to retrieve files from"""
 
 		self.code = code
+		self.filesys = filesys
+		self.emos = emos
+
 		self.tree = [['SEC', 'code']]
 
 	def next_char(self):
@@ -526,7 +531,7 @@ class Compiler:
 					self.tree.append(['DATA', args])
 				else:
 					self.tree.append([MNEMONIC_LIST.index(mnemonic.upper()), args])
-			else:
+			elif self.scan_char() != '[':
 				# We have a label line
 				if self.next_char() != '[':
 					raise ParseError('Missing \'[\'')
