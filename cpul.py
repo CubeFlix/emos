@@ -30,13 +30,6 @@ class Interrupt(Exception):
 	pass
 
 
-class Halt(Exception):
-
-	"""Halting exception. Called when a HALT opcode is ran."""
-
-	pass
-
-
 class SysError(Exception):
 
 	"""The system error."""
