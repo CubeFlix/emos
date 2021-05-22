@@ -30,6 +30,13 @@ class Interrupt(Exception):
 	pass
 
 
+class Halt(Exception):
+
+	"""Halting exception. Called when a HALT opcode is ran."""
+
+	pass
+
+
 class SysError(Exception):
 
 	"""The system error."""
@@ -1349,18 +1356,16 @@ class CPUCore:
 
 		output = int.from_bytes(self.handle_output(self.get(output)), byteorder='little')
 
-		self.running = False
 		self.output_exit = (output, None)
 
-		if int.from_bytes(self.registers['RIP'].data[4 : 8], byteorder='little') >= int.from_bytes(self.registers['RDS'].data[4 : 8], byteorder='little'):
-			pass
-		else:
-			# Add the exitcode
-			self.cpu.update_from_computer()
-			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-			self.set(int.to_bytes(output, 2, byteorder='little'), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
+		# Add the exitcode
+		self.cpu.update_from_computer()
+		self.processmemory = self.cpu.memory.memorypartitions[self.pname]
+		self.set(int.to_bytes(output, 2, byteorder='little'), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 
-		return (output, None)
+		self.running = False
+
+		return (0, None)
 
 	def call(self, addr):
 
@@ -1472,6 +1477,19 @@ class CPUCore:
 		# Move the data
 		return self.move(dest, ('mem', (int.to_bytes(offset, 4, byteorder='little'), b'\x04')))
 
+	def call_library(self, lid, call):
+
+		"""Call a library call with library ID lid, and call ID call,
+		   Args: lid -> library ID to call.
+		         call -> call ID to run"""
+
+		# Create and start the thread
+		sthread = threading.Thread(target=self.cpu.computer.operatingsystem.call_library, args=(self.pname[1], self.tid, self.handle_output(self.get(lid)), self.handle_output(self.get(call))))
+		sthread.start()
+		# Raise an interrupt
+		raise Interrupt()
+		# No need to return, as the interrupt stops execution anyway
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
@@ -1515,7 +1533,8 @@ class CPUCore:
 				   38 : (pushn, 1, {}),
 				   39 : (inf_loop, 0, {}),
 				   40 : (interrupt, 1, {}),
-				   41 : (argn, 2, {})}
+				   41 : (argn, 2, {}),
+				   42 : (call_library, 2, {})}
 
 
 	def inc_rip(self, val):
@@ -1540,13 +1559,13 @@ class CPUCore:
 			return
 
 		if output[0] != 0:
-			self.running = False
-			self.error = True
 			# Process memory 0 is exit code
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
 			self.set(int.to_bytes(output[0], 2, byteorder='little'), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			# Exit
+			# TEMP
+			print('OUTPUT', output)
 			raise Exit(output[1])
 		else:
 			return output[1]
@@ -1621,8 +1640,6 @@ class CPUCore:
 
 		"""Begin execution of the data in the core's designated process memory."""
 
-		self.running = True
-
 		while int.from_bytes(self.registers['RIP'].data[4 : 8], byteorder='little') < int.from_bytes(self.registers['RDS'].data[4 : 8], byteorder='little') and self.running and not self.error:
 			# Get opcode
 			opcode = int.from_bytes(self.handle_output(self.get_current_code_bytes(1)), byteorder='little')
@@ -1643,7 +1660,7 @@ class CPUCore:
 			if self.speed:
 				time.sleep(1 / self.speed)
 
-		if not self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].waiting:
+		if not self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].waiting and self.running:
 			# Exitcode 0
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
@@ -1659,7 +1676,6 @@ class CPUCore:
 		if hasattr(self, 'output_exit'):
 			return 
 
-		self.running = True
 		num_executed = 0
 
 		while int.from_bytes(self.registers['RIP'].data[4 : 8], byteorder='little') < int.from_bytes(self.registers['RDS'].data[4 : 8], byteorder='little') and self.running and not self.error and num_executed < num:
@@ -1671,26 +1687,25 @@ class CPUCore:
 			args = []
 			for arg in range(n_args):
 				args.append(self.handle_output(self.parse_argument()))
+			if n_args != len(args):
+				self.handle_output((25, "Not enough arguments."))
 			# Run the opcode
 			try:
 				self.handle_output(func(*([self] + args), **d_args))
 			except Interrupt as e:
 				# Catch interrupts
-				self.running = False
 				return
 			if self.speed:
 				time.sleep(1 / self.speed)
 
 			num_executed += 1
 
-		if int.from_bytes(self.registers['RIP'].data[4 : 8], byteorder='little') >= int.from_bytes(self.registers['RDS'].data[4 : 8], byteorder='little') and not self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].waiting:
+		if int.from_bytes(self.registers['RIP'].data[4 : 8], byteorder='little') >= int.from_bytes(self.registers['RDS'].data[4 : 8], byteorder='little') and not self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].waiting and self.running:
 			# We have got to the end of the code
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
 			self.set(bytes([0, 0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			self.output_exit = (0, None)
-
-		self.running = False
 
 	def execute(self):
 
@@ -1703,6 +1718,8 @@ class CPUCore:
 			self.running = False
 			return self.output_exit
 
+		self.running = True
+
 		try:
 			try:
 				self._execute()
@@ -1711,6 +1728,8 @@ class CPUCore:
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
 				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 2), byteorder='little'), str(e))
+				self.running = False
+				self.error = True
 		except Exception as e:
 			# Catch internal errors
 			import traceback
@@ -1724,6 +1743,8 @@ class CPUCore:
 
 		if hasattr(self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid], 'output'):
 			self.output_exit = self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].output
+
+		self.running = False
 		
 		return self.output_exit
 
@@ -1749,6 +1770,7 @@ class CPUCore:
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
 				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 2), byteorder='little'), str(e))
+				self.error = True
 		except Exception as e:
 			# Catch internal errors
 			# Temp
@@ -1758,11 +1780,12 @@ class CPUCore:
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
 			self.set(bytes([0xff, 0x0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
 			self.output_exit = (0xff, str(e))
-			self.running = False
 			self.error = True
-		
+
 		if hasattr(self, 'output_exit'):
 			return self.output_exit
+
+		self.running = False
 
 		return
 
@@ -2563,7 +2586,7 @@ class OperatingSystem:
 
 	def systemcall(self, pid, tid):
 
-		"""Preform a system call. NOTE: never uses the stack
+		"""Preform a system call.
 		   Args: pid -> process ID of the process that called the system call
 		         tid -> thread ID of the thread that called the system call"""
 
@@ -2761,9 +2784,62 @@ class OperatingSystem:
 
 			# Call the interrupt
 			exitcode = self.computer.interrupt(iid, pid, tid)
+
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
 			# In case of errors, set the pidtid to not running/error
+			self.processes[pid].threads[tid].waiting = False
+			# Handle exitcode
+			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
+		except Exception as e:
+			import traceback # Temp
+			traceback.print_exc() # Temp
+			# Handle exitcode
+			self.halt_thread(pid, tid, 255)
+
+	def call_library(self, pid, tid, lid, call):
+
+		"""Preform a dynamic library call.
+		   Args: pid -> process ID of the process that called the library
+		         tid -> thread ID of the thread that called the library
+		         lid -> library ID to call to
+		         call -> call ID to call"""
+
+		try:
+			self.processes[pid].threads[tid].waiting = True
+			# Wait until the CPU has finished the thread (and registers are committed)
+			while True:
+				ready = True
+				for cpu in self.computer.cpu.cores:
+					try:
+						if cpu.pname == ('proc', pid) and cpu.tid == tid:
+							ready = False
+					except Exception:
+						pass
+				if ready:
+					break
+			
+			# Run the library call (NOTE: all library calls must call update_process_memory_global after modifying memory)
+			# NOTE: All library calls must modify memory in the processes memory data, not global memory data. Using the method update_process_memory_global, memory can be synced up with all processes. 
+			lid = int.from_bytes(lid, byteorder='little')
+			call = int.from_bytes(call, byteorder='little')
+
+			if lid < len(self.processes[pid].threads[tid].dynamic_libraries):
+				# Get the library
+				lib = self.processes[pid].threads[tid].dynamic_libraries[lid]
+				if call in lib.defined_calls:
+					# Call the library
+					exitcode = self.processes[pid].threads[tid].dynamic_libraries[lid].handle(call)
+				else:
+					# Invalid call ID
+					exitcode = (28, "Call ID is invalid.")
+			else:
+				# Invalid LID
+				exitcode = (27, "Library ID is invalid.")
+
+			# Update memory in process
+			self.update_process_memory_global(pid, tid)
+			# In case of errors, set the thread's waiting state to not running/error
 			self.processes[pid].threads[tid].waiting = False
 			# Handle exitcode
 			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
@@ -3206,7 +3282,7 @@ class TerminalScreen(Peripheral):
 		"""Update the data buffer to the screen."""
 
 		# Clear the terminal
-		clear()
+		# clear()
 
 		# Get a variable for the data
 		data = str(self.computer.memory.memorypartitions[('perp', self.pid)].data.replace(b'\x00', b''), ENCODING)
@@ -3644,7 +3720,8 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # Create library 0
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # Create and run library 0
-code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
+code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$*\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # code2 = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
@@ -3708,6 +3785,7 @@ print(computer.operatingsystem.processes[0].stdout.data)
 # print(computer.operatingsystem.processes[1].threads[0].output)
 # print(computer.memory.memorypartitions[('proc', 1)].stack.data)
 print(computer.operatingsystem.processes[0].output)
+print("Done process 0")
 computer.operatingsystem.process_await(pid2)
 print(computer.operatingsystem.processes)
 print(computer.operatingsystem.processes[1].processmemory.stack.data)

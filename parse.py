@@ -8,7 +8,7 @@ REGISTER_NAMES = ['RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI', 'RIP',
 CHARS_HEX = '0123456789abcdefABCDEF'
 CHARS_DEC = '0123456789'
 MNEMONIC_LIST = ['MOV', 'ADD', 'SUB', 'MUL', 'SMUL', 'DIV', 'SDIV', 'AND', 'OR', 'XOR', 'NOT', 'PUSH', 'POP', 'ADDF', 'SUBF', 'MULF', 'SMULF', 'DIVF', 'SDIVF', 'ANDF', 'ORF', 'XORF', 'NOTF', 'JMP', 'CMP', 'SCMP', 'JL', 'JG',
-				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN']
+				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB']
 
 class ParseError(Exception):
 
@@ -1029,10 +1029,7 @@ MOV REG[RAX, [0] : [4]], [13]
 MOV REG[RBX, [0] : [4]], [0]
 SYS
 
-MOV REG[RAX, [0] : [4]], [14]
-# RBX already has the right value
-MOV REG[RCX, [0] : [4]], [0]
-SYS
+LIB REG[RBX, [0] : [4]], [0]
 
 
 HLT REG[RAX, [0] : [4]]
