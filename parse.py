@@ -8,7 +8,9 @@ REGISTER_NAMES = ['RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI', 'RIP',
 CHARS_HEX = '0123456789abcdefABCDEF'
 CHARS_DEC = '0123456789'
 MNEMONIC_LIST = ['MOV', 'ADD', 'SUB', 'MUL', 'SMUL', 'DIV', 'SDIV', 'AND', 'OR', 'XOR', 'NOT', 'PUSH', 'POP', 'ADDF', 'SUBF', 'MULF', 'SMULF', 'DIVF', 'SDIVF', 'ANDF', 'ORF', 'XORF', 'NOTF', 'JMP', 'CMP', 'SCMP', 'JL', 'JG',
-				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB']
+				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB', 'BSL', 'ASL', 'BSLF', 'ASLF', 'BSR', 'ASR', 'BSRF', 'ASRF']
+
+STD_LIBS = ['IOLIB']
 
 class ParseError(Exception):
 
@@ -531,7 +533,7 @@ class Compiler:
 					self.tree.append(['DATA', args])
 				else:
 					self.tree.append([MNEMONIC_LIST.index(mnemonic.upper()), args])
-			elif self.scan_char() != '[':
+			elif self.scan_char() == '[':
 				# We have a label line
 				if self.next_char() != '[':
 					raise ParseError('Missing \'[\'')
@@ -585,6 +587,23 @@ class Compiler:
 									self.parse_through_whitespace_nonewline(allow_comments=True)
 									break
 							self.tree.append(['DATA', args])
+			elif self.scan_char() == '<':
+				# We have a include directive
+				if self.next_char() != '<':
+					raise ParseError('Missing \'<\'')
+				# Get the include name
+				self.parse_through_whitespace_nonewline()
+				if self.scan_char() == '"':
+					# File include
+					self.next_char()
+					# Get the file name
+					
+				else:
+					# Library include
+					libname = self.parse_until_non_alpha().upper()
+					self.tree += [[0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
+						[0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname))]]]], [36, []]]
+
 
 		return self.tree
 
@@ -1028,17 +1047,31 @@ class Compiler:
 # PUSHN REG[RAX, [0] : [1]]
 # HLT [0x0]'''
 
-code = '''# Call dymanic lib 1
+# code = '''# Call dymanic lib 1
+# 
+# MOV REG[RAX, [0] : [4]], [13]
+# MOV REG[RBX, [0] : [4]], [0]
+# SYS
+# 
+# LIB REG[RBX, [0] : [4]], [0]
+# 
+# 
+# HLT REG[RAX, [0] : [4]]
+# 
+# '''
 
+# code = '''# Heap memory test
+# MOV REG[RAX, [0] : [4]], [15]
+# SYS
+# 
+# MOV HEAP[REG[RBX, [0] : [4]], [0] : [4]], [69]
+# 
+# '''
+
+code = '''
 MOV REG[RAX, [0] : [4]], [13]
-MOV REG[RBX, [0] : [4]], [0]
+MOV REG[RBX, [0] : [4]], [100]
 SYS
-
-LIB REG[RBX, [0] : [4]], [0]
-
-
-HLT REG[RAX, [0] : [4]]
-
 '''
 
 a = Compiler(code)
@@ -1054,6 +1087,4 @@ a.compile()
 print(a.compiled)
 print(a.data_index)
 print(a.code)
-
-
-
+print(a.tree)

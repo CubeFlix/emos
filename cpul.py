@@ -46,13 +46,11 @@ def getsize(datadescriptor):
 	elif datadescriptor[0] == 'mem':
 		size = datadescriptor[1][1]
 	elif datadescriptor[0] == 'heap':
-		raise NotImplementedError("Heap is not implemented yet.")
-	elif datadescriptor[0] == 'ram':
-		raise NotImplementedError("RAM is not implemented yet.")
+		size = datadescriptor[1][2]
 	elif datadescriptor[0] == 'perp':
-		raise NotImplementedError("Peripheral memory is not implemented yet.")
+		size = datadescriptor[1][2]
 	elif datadescriptor[0] == 'pmem':
-		raise NotImplementedError("Other process memory is not implemented yet.")
+		size = datadescriptor[1][2]
 	else:
 		return (15, "Not a supported destination type.")	
 
@@ -277,11 +275,34 @@ class MemorySection:
 		self.size -= numbytes
 		return (0, None)
 
+	def get_bytes(self, offset, numbytes):
+
+		"""Get bytes from the memory section.
+		   Args: offset -> beginning offset
+		         numbytes -> number of bytes to get"""
+
+		if offset + numbytes > self.size:
+			return (5, "Offset is not in memory.")
+
+		return (0, self.data[offset : offset + numbytes])
+
+	def set_bytes(self, offset, data):
+
+		"""Set data to the memory section.
+		   Args: offset -> offset to begin setting data at
+		         data -> data to set"""
+
+		if offset + len(data) > self.size:
+			return (5, "Offset is not in memory.")
+
+		self.data = self.data[ : offset] + data + self.data[offset + len(data) : ]
+		return (0, None)
+
 	def __repr__(self):
 
 		"""Get the string representation of the memory."""
 
-		return "<MemorySection " + self.name + ">"
+		return "<MemorySection " + str(self.name) + ">"
 
 	def __str__(self):
 
@@ -527,7 +548,85 @@ class Memory:
 		"""Get a single byte from memory at offset offset.
 		   Args: offset -> the offset to get the byte from"""
 
-		currentBase
+		currentOffset = 0
+		# Loop to find the byte
+		for name, memorypartition in self.memorypartitions.items():
+			lastOffset = currentOffset
+			# Check if the current base works
+			if type(memorypartition) == ProcessMemory:
+				currentOffset -= memorypartition.es
+			elif type(memorypartition) == MemorySection:
+				currentOffset -= memorypartition.size
+
+			if currentOffset <= 0:
+				if type(memorypartition) == ProcessMemory:
+					return memorypartition.get_byte(lastOffset)
+				elif type(memorypartition) == MemorySection:
+					return (0, memorypartition.data[lastOffset])
+				
+		# Not in memory
+		return (5, "Offset not in memory.")
+
+	def set_byte(self, offset, byte):
+
+		"""Set a single byte to memory at offset offset.
+		   Args: offset -> the offset to set the byte to
+		         byte -> the byte to set"""
+
+		currentOffset = 0
+		# Loop to find the byte
+		for name, memorypartition in self.memorypartitions.items():
+			lastOffset = currentOffset
+			# Check if the current base works
+			if type(memorypartition) == ProcessMemory:
+				currentOffset -= memorypartition.es
+			elif type(memorypartition) == MemorySection:
+				currentOffset -= memorypartition.size
+			# Set the byte
+			if currentOffset <= 0:
+				if type(memorypartition) == ProcessMemory:
+					return self.memorypartitions[name].set_byte(lastOffset, byte)
+				elif type(memorypartition) == MemorySection:
+					self.memorypartitions[name].data[lastOffset] = byte
+					return (0, None)
+
+		# Not in memory
+		return (5, "Offset not in memory.")
+
+	def get_bytes(self, offset, length):
+
+		"""Get bytes from memory with offset offset and length length.
+		   Args: offset -> offset to get the bytes from
+		         length -> length of data to get"""
+
+		data = bytearray()
+		# Loop over each byte
+		for i in range(offset, offset + length):
+			# Get byte
+			byte = self.get_byte(i)
+			if byte[0] != 0:
+				# Error
+				return byte
+			# Add the data
+			data += bytearray([byte[1]])
+		# Return the data
+		return (0, data)
+
+	def set_bytes(self, offset, data):
+
+		"""Get bytes from memory with offset offset and length length.
+		   Args: offset -> offset to get the bytes from
+		         length -> length of data to get"""
+
+		# Loop over each byte
+		for i, byte in data:
+			# Get byte
+			exitcode = self.set_byte(i + offset, byte)
+			if exitcode[0] != 0:
+				# Error
+				return exitcode
+
+		return (0, None)
 
 	def __repr__(self):
 
@@ -646,10 +745,6 @@ class CPUCore:
 			memOffset = int.from_bytes(dest[1][1], byteorder='little')
 			memSize = int.from_bytes(dest[1][2], byteorder='little')
 			return self.cpu.computer.operatingsystem.get_memory(memId, memOffset, memSize)
-		elif srctype == 'ram':
-			# RAM source
-			# update cpu memory
-			raise NotImplementedError("RAM is not implemented yet.")
 		elif srctype == 'perp':
 			# Peripheral memory source
 			memId = int.from_bytes(dest[1][0], byteorder='little')
@@ -735,10 +830,6 @@ class CPUCore:
 			memOffset = int.from_bytes(dest[1][1], byteorder='little')
 			memSize = int.from_bytes(dest[1][2], byteorder='little')
 			return self.cpu.computer.operatingsystem.edit_memory(memId, srcdata, memOffset)
-		elif desttype == 'ram':
-			# Move to RAM
-			# updates cpu memory
-			raise NotImplementedError("RAM is not implemented yet.")
 		elif desttype == 'perp':
 			# Peripheral memory destination
 			memId = int.from_bytes(dest[1][0], byteorder='little')
@@ -1483,6 +1574,82 @@ class CPUCore:
 		raise Interrupt()
 		# No need to return, as the interrupt stops execution anyway
 
+	def bit_shift_left(self, src0, src1, dest, modflags=True, signed=False):
+
+		"""Use a binary left shift on src0 and src1 and save it to dest.
+		   Args: src0, src1: source tuples to shift
+		   		 dest -> destination tuple
+		   		 modflags -> whether to modify the flags
+		   		 signed -> whether to use signed shifts"""
+
+		# Get source data
+		src0exitcode, src0data = self.get(src0)
+
+		if src0exitcode != 0:
+			return (src0exitcode, src0data)
+
+		src1exitcode, src1data = self.get(src1)
+
+		if src1exitcode != 0:
+			return (src1exitcode, src1data)
+
+		# Preform shift
+		exitcode, size = getsize(dest)
+		if exitcode != 0:
+			return (exitcode, size)
+
+		exitcode, answer = self.alu.bit_shift_left(src0data, src1data, size, signed)
+		if exitcode != 0:
+			if exitcode == 18:
+				if modflags:
+					self.registers['RFLAGS'].data[1] = 1
+				return (exitcode, answer)
+
+		if modflags:
+			self.registers['RFLAGS'].data[2] = bin(int.from_bytes(answer, byteorder='little')).count('1') % 2
+			self.registers['RFLAGS'].data[1] = 0
+
+		exitcode, msg = self.set(answer, dest)
+		return (exitcode, msg)
+
+	def bit_shift_right(self, src0, src1, dest, modflags=True, signed=False):
+
+		"""Use a binary right shift on src0 and src1 and save it to dest.
+		   Args: src0, src1: source tuples to shift
+		   		 dest -> destination tuple
+		   		 modflags -> whether to modify the flags
+		   		 signed -> whether to use signed shifts"""
+
+		# Get source data
+		src0exitcode, src0data = self.get(src0)
+
+		if src0exitcode != 0:
+			return (src0exitcode, src0data)
+
+		src1exitcode, src1data = self.get(src1)
+
+		if src1exitcode != 0:
+			return (src1exitcode, src1data)
+
+		# Preform shift
+		exitcode, size = getsize(dest)
+		if exitcode != 0:
+			return (exitcode, size)
+
+		exitcode, answer = self.alu.bit_shift_right(src0data, src1data, size, signed)
+		if exitcode != 0:
+			if exitcode == 18:
+				if modflags:
+					self.registers['RFLAGS'].data[1] = 1
+				return (exitcode, answer)
+
+		if modflags:
+			self.registers['RFLAGS'].data[2] = bin(int.from_bytes(answer, byteorder='little')).count('1') % 2
+			self.registers['RFLAGS'].data[1] = 0
+
+		exitcode, msg = self.set(answer, dest)
+		return (exitcode, msg)
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
@@ -1527,7 +1694,15 @@ class CPUCore:
 				   39 : (inf_loop, 0, {}),
 				   40 : (interrupt, 1, {}),
 				   41 : (argn, 2, {}),
-				   42 : (call_library, 2, {})}
+				   42 : (call_library, 2, {}),
+				   43 : (bit_shift_left, 3, {}),
+				   44 : (bit_shift_left, 3, {'signed' : True}),
+				   45 : (bit_shift_left, 3, {'modflags' : False}),
+				   46 : (bit_shift_left, 3, {'signed' : True, 'modflags' : False}),
+				   47 : (bit_shift_right, 3, {}),
+				   48 : (bit_shift_right, 3, {'signed' : True}),
+				   49 : (bit_shift_right, 3, {'modflags' : False}),
+				   50 : (bit_shift_right, 3, {'signed' : True, 'modflags' : False})}
 
 
 	def inc_rip(self, val):
@@ -1718,7 +1893,7 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 2), byteorder='little'), str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 2, 2)[1], byteorder='little'), str(e))
 				self.running = False
 				self.error = True
 		except Exception as e:
@@ -1760,7 +1935,7 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es, self.processmemory.es + 2), byteorder='little'), str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 2, 2)[1], byteorder='little'), str(e))
 				self.error = True
 		except Exception as e:
 			# Catch internal errors
@@ -2012,6 +2187,46 @@ class ALU:
 		except OverflowError as e:
 			return (18, "Answer overflow.")
 			
+		return (0, answer)
+
+	def bit_shift_left(self, a, b, answer_length, signed=False):
+
+		"""Preform a bit shift left on a and b.
+		   Args: a -> bytearray as the data to shift
+		         b -> bytearray as the amount of bits to shift
+		         answer_length -> length of the answer
+		         signed -> whether to use a signed bit shift"""
+
+		# Convert bytes to bits
+		a_int = int.from_bytes(a, byteorder='little', signed=signed)
+		b_int = int.from_bytes(b, byteorder='little')
+		answer_length = int.from_bytes(answer_length, byteorder='little')
+
+		try:
+			answer = int.to_bytes(a_int << b_int, answer_length, byteorder='little', signed=signed)
+		except OverflowError as e:
+			return (18, "Answer overflow.")
+
+		return (0, answer)
+
+	def bit_shift_right(self, a, b, answer_length, signed=False):
+
+		"""Preform a bit shift right on a and b.
+		   Args: a -> bytearray as the data to shift
+		         b -> bytearray as the amount of bits to shift
+		         answer_length -> length of the answer
+		         signed -> whether to use a signed bit shift"""
+
+		# Convert bytes to bits
+		a_int = int.from_bytes(a, byteorder='little', signed=signed)
+		b_int = int.from_bytes(b, byteorder='little')
+		answer_length = int.from_bytes(answer_length, byteorder='little')
+
+		try:
+			answer = int.to_bytes(a_int >> b_int, answer_length, byteorder='little', signed=signed)
+		except OverflowError as e:
+			return (18, "Answer overflow.")
+
 		return (0, answer)
 
 	def __repr__(self):
@@ -2296,7 +2511,7 @@ class OperatingSystem:
 		# No holes, so add a new id
 		current_mem_id = (max(self.mem_alloc_ids) if self.mem_alloc_ids else -1) + 1
 
-		self.computer.memory.add_memory_partition(MemorySection(('mem', current_mem_id), 0, bytearray()))
+		self.computer.memory.add_memory_partition(('mem', current_mem_id), MemorySection(('mem', current_mem_id), 0, bytearray()))
 		self.mem_alloc_ids.append(current_mem_id)
 		return (0, current_mem_id)
 
@@ -2306,7 +2521,7 @@ class OperatingSystem:
 		   Args: mem_id -> memory id"""
 
 		if not mem_id in self.mem_alloc_ids:
-			return (19, "Memory id does not exist.")
+			return (19, "Memory ID does not exist.")
 
 		# Free the memory
 		self.mem_alloc_ids.remove(mem_id)
@@ -2320,7 +2535,7 @@ class OperatingSystem:
 		   Args: mem_id -> memory id"""
 
 		if not mem_id in self.mem_alloc_ids:
-			return (19, "Memory id does not exist.")
+			return (19, "Memory ID does not exist.")
 
 		return (0, self.computer.memory.memorypartitions[('mem', mem_id)].size)
 
@@ -2332,7 +2547,7 @@ class OperatingSystem:
 		   		 size -> amount of memory to get"""
 
 		if not mem_id in self.mem_alloc_ids:
-			return (19, "Memory id does not exist.")
+			return (19, "Memory ID does not exist.")
 
 		return self.computer.memory.memorypartitions[('mem', mem_id)].get_bytes(start_offset, size)
 
@@ -2343,15 +2558,15 @@ class OperatingSystem:
 		   		 data -> data to edit to
 		   		 start_offset -> starting offset"""
 
-		# Get data
-		exitcode, current_data = self.get_memory(mem_id, start_offset)
-		if exitcode != 0:
-			return (exitcode, current_data)
-
 		# Get size
 		exitcode, size = self.get_memory_size(mem_id)
 		if exitcode != 0:
 			return (exitcode, size)
+
+		# Get data
+		exitcode, current_data = self.get_memory(mem_id, start_offset, size)
+		if exitcode != 0:
+			return (exitcode, current_data)
 
 		# Too large, but starts within bounds
 		if start_offset + len(data) > size and start_offset < size:
@@ -2364,7 +2579,7 @@ class OperatingSystem:
 			# New data
 			new_data = current_data[ : start_offset] + data + current_data[start_offset + len(data) : ]
 
-		return self.computer.memory.edit_memory_partition(('mem', mem_id), new_data)
+		return self.computer.memory.edit_memory_partition(('mem', mem_id), MemorySection(self.computer.memory.memorypartitions[('mem', mem_id)].name, len(new_data), new_data))
 
 	def process_create(self, process):
 
@@ -2737,6 +2952,15 @@ class OperatingSystem:
 				else:
 					# Invalid LID
 					exitcode = (27, "Library ID is invalid.")
+			elif syscallid == 15:
+				# Allocate heap memory, putting the ID in RBX
+				exitcode = self.allocate_memory()
+				if exitcode[0] == 0:
+					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(exitcode[1], 4, byteorder='little')
+			elif syscallid == 16:
+				# Free heap memory, with the ID in RBX
+				s_id = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.free_memory(s_id)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
@@ -3664,6 +3888,8 @@ class IOLIB(DynamicLibrary):
 	# Print from heap memory (null-terminated)
 	# Get chars (length in RBX) into stack
 	# Get input into stack (length put into RBX)
+	# Integer to string
+	# String to integer
 
 	"""I/O (Input/Output) tools library."""
 
@@ -3674,21 +3900,20 @@ class IOLIB(DynamicLibrary):
 
 		if call == 0:
 			# Write from the process memory
-			self.operatingsystem.syscall
-
-		self.operatingsystem.processes[self.pid].stdout.write(b'Hello, world!\n', self.operatingsystem.terminal)
+			# Write to the processes STDOut with the beginning offset in RBX, and the length in RCX
+			begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+			length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+			# Get the data
+			processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+			exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+			if exitcode != 0:
+				exitcode = (exitcode, None)
+			else:
+				# Write the data to the STDOut
+				exitcode = self.processes[pid].stdout.write(data, self.terminal)
 
 		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
 		return (0, None)
-
-class MEMLIB(DynamicLibrary):
-
-	defined_calls = [0]
-
-	# Allocate memory (ID put into RBX)
-	# Free memory (ID in RBX)
-
-	"""Memory tool library."""
 
 
 print('CREATING CODE')
@@ -3723,7 +3948,7 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # Input test
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x03\x00\x00\x00$!\x02\x01\x00\x00\x00\x00')
 # Hello, world!
-code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00p\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00')
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00p\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00')
 # Hello, world! sod
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00w\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00$&\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x01\x00\x00\x00!\x02\x01\x00\x00\x00\x00')
 # Kernel panics
@@ -3734,6 +3959,8 @@ code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$*\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # code2 = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
+# Puts a number into heap
+code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0f\x00\x00\x00$\x00\x03\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00E\x00\x00\x00')
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
 # processmemory = ProcessMemory(code, b'Hello!', b'')
@@ -3792,6 +4019,7 @@ print(computer.operatingsystem.processes)
 print(computer.memory.memorypartitions[('proc', 0)].stack.data)
 print(computer.memory.memorypartitions[('proc', 0)].data.data)
 print(computer.operatingsystem.processes[0].stdout.data)
+print(computer.memory.memorypartitions)
 # computer.operatingsystem.process_await(pid2)
 # print(computer.operatingsystem.processes[1].threads[0].output)
 # print(computer.memory.memorypartitions[('proc', 1)].stack.data)
@@ -3801,4 +4029,5 @@ computer.operatingsystem.process_await(pid2)
 print(computer.operatingsystem.processes)
 print(computer.operatingsystem.processes[1].processmemory.stack.data)
 print(computer.operatingsystem.processes[1].output)
+# print(computer.memory.memorypartitions[('mem', 0)].data)
 computer.operatingsystem.stop_os()
