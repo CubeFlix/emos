@@ -611,8 +611,12 @@ class Compiler:
 				else:
 					# Library include
 					libname = self.parse_until_non_alpha().upper()
-					self.tree += [[0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
-						[0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname), 4, byteorder='little')]]]], [36, []]]
+					self.tree += [[11, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
+						[11, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]],
+						 [0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
+						 [0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname), 4, byteorder='little')]]]], 
+						 [36, []], [12, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]],
+						  [12, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]]]
 					# Eat the ending char
 					self.parse_through_whitespace_nonewline()
 					if self.next_char() != '>':
@@ -1082,20 +1086,20 @@ class Compiler:
 # MOV HEAP[REG[RBX, [0] : [4]], [0] : [4]], [69]
 # 
 # '''
-
-code = '''
-PUSH REG[RAX, [0] : [4]], [13]
-PUSH REG[RBX, [0] : [4]], [13]
-MOV REG[RAX, [0] : [4]], [13]
-MOV REG[RBX, [0] : [4]], [100]
-SYS
-POP REG[RBX, [0] : [4]], [13]
-POP REG[RAX, [0] : [4]], [13]
-'''
-
+# 
 # code = '''
-# <iolib>
+# PUSH REG[RAX, [0] : [4]], [13]
+# PUSH REG[RBX, [0] : [4]], [13]
+# MOV REG[RAX, [0] : [4]], [13]
+# MOV REG[RBX, [0] : [4]], [100]
+# SYS
+# POP REG[RBX, [0] : [4]], [13]
+# POP REG[RAX, [0] : [4]], [13]
 # '''
+# 
+code = '''
+<iolib>
+'''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
