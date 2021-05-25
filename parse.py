@@ -595,15 +595,23 @@ class Compiler:
 				self.parse_through_whitespace_nonewline()
 				if self.scan_char() == '"':
 					# File include
-					self.next_char()
-					# Get the file name
-					
+					filename = self.parse_through_string(self.next_char())
+					# Get the file data
+					if self.filesys == 'comp':
+						# Computer file system
+						file = open(filename, 'r')
+						filedata = file.read()
+						file.close()
+					# Eat the ending char
+					if self.next_char() != '>':
+						raise ParseError("Missing '>'")
+					# Add the code
+					self.code = filedata + self.code
 				else:
 					# Library include
 					libname = self.parse_until_non_alpha().upper()
 					self.tree += [[0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
 						[0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname))]]]], [36, []]]
-
 
 		return self.tree
 
