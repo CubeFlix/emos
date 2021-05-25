@@ -603,6 +603,7 @@ class Compiler:
 						filedata = file.read()
 						file.close()
 					# Eat the ending char
+					self.parse_through_whitespace_nonewline()
 					if self.next_char() != '>':
 						raise ParseError("Missing '>'")
 					# Add the code
@@ -611,7 +612,13 @@ class Compiler:
 					# Library include
 					libname = self.parse_until_non_alpha().upper()
 					self.tree += [[0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
-						[0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname))]]]], [36, []]]
+						[0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname), 4, byteorder='little')]]]], [36, []]]
+					# Eat the ending char
+					self.parse_through_whitespace_nonewline()
+					if self.next_char() != '>':
+						raise ParseError("Missing '>'")
+			else:
+				raise ParseError("Invalid line.")
 
 		return self.tree
 
@@ -1077,10 +1084,18 @@ class Compiler:
 # '''
 
 code = '''
+PUSH REG[RAX, [0] : [4]], [13]
+PUSH REG[RBX, [0] : [4]], [13]
 MOV REG[RAX, [0] : [4]], [13]
 MOV REG[RBX, [0] : [4]], [100]
 SYS
+POP REG[RBX, [0] : [4]], [13]
+POP REG[RAX, [0] : [4]], [13]
 '''
+
+# code = '''
+# <iolib>
+# '''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
