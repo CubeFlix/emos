@@ -8,7 +8,7 @@ REGISTER_NAMES = ['RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI', 'RIP',
 CHARS_HEX = '0123456789abcdefABCDEF'
 CHARS_DEC = '0123456789'
 MNEMONIC_LIST = ['MOV', 'ADD', 'SUB', 'MUL', 'SMUL', 'DIV', 'SDIV', 'AND', 'OR', 'XOR', 'NOT', 'PUSH', 'POP', 'ADDF', 'SUBF', 'MULF', 'SMULF', 'DIVF', 'SDIVF', 'ANDF', 'ORF', 'XORF', 'NOTF', 'JMP', 'CMP', 'SCMP', 'JL', 'JG',
-				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB', 'BSL', 'ASL', 'BSLF', 'ASLF', 'BSR', 'ASR', 'BSRF', 'ASRF']
+				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB', 'BSL', 'ASL', 'BSLF', 'ASLF', 'BSR', 'ASR', 'BSRF', 'ASRF', 'EIR']
 
 STD_LIBS = ['IOLIB']
 
@@ -611,12 +611,11 @@ class Compiler:
 				else:
 					# Library include
 					libname = self.parse_until_non_alpha().upper()
-					self.tree += [[11, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
-						[11, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]],
-						 [0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
-						 [0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname), 4, byteorder='little')]]]], 
-						 [36, []], [12, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]],
-						  [12, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]]]
+					self.tree += [[11, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]], [11, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], 
+						['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]], [0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
+						[0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname), 4, byteorder='little')]]]], [36, []], 
+						[12, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]], [12, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], 
+						['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]]]
 					# Eat the ending char
 					self.parse_through_whitespace_nonewline()
 					if self.next_char() != '>':
@@ -1086,20 +1085,22 @@ class Compiler:
 # MOV HEAP[REG[RBX, [0] : [4]], [0] : [4]], [69]
 # 
 # '''
-# 
+
 # code = '''
-# PUSH REG[RAX, [0] : [4]], [13]
-# PUSH REG[RBX, [0] : [4]], [13]
+# PUSH REG[RAX, [0] : [4]]
+# PUSH REG[RBX, [0] : [4]]
 # MOV REG[RAX, [0] : [4]], [13]
 # MOV REG[RBX, [0] : [4]], [100]
 # SYS
-# POP REG[RBX, [0] : [4]], [13]
-# POP REG[RAX, [0] : [4]], [13]
+# POP REG[RBX, [0] : [4]]
+# POP REG[RAX, [0] : [4]]
 # '''
-# 
-code = '''
-<iolib>
-'''
+
+# code = '''
+# <iolib>
+# '''
+
+code = '''<"test.cpu">'''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 

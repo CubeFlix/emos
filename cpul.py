@@ -1650,6 +1650,15 @@ class CPUCore:
 		exitcode, msg = self.set(answer, dest)
 		return (exitcode, msg)
 
+	def exit_if_rax(self):
+
+		"""Exit the program if RAX is not 0. If so, exit with exitcode in RAX."""
+
+		if self.registers['RAX'].data[ : 2] != b'\x00\x00':			
+			return self.halt(('REG', ('AX', b'\x00', b'\x02')))
+
+		return (0, None)
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
@@ -1702,7 +1711,8 @@ class CPUCore:
 				   47 : (bit_shift_right, 3, {}),
 				   48 : (bit_shift_right, 3, {'signed' : True}),
 				   49 : (bit_shift_right, 3, {'modflags' : False}),
-				   50 : (bit_shift_right, 3, {'signed' : True, 'modflags' : False})}
+				   50 : (bit_shift_right, 3, {'signed' : True, 'modflags' : False}),
+				   51 : (exit_if_rax, 0, {})}
 
 
 	def inc_rip(self, val):
@@ -2490,7 +2500,7 @@ class OperatingSystem:
 		self.kernel_stdout = STDOut()
 
 		# System libraries (TODO)
-		self.syslibs = []
+		self.syslibs = [IOLIB]
 
 	def set_max_thread_operations(self, max_operations_per_thread):
 
@@ -2617,9 +2627,10 @@ class OperatingSystem:
 		if not pid in self.process_ids:
 			return (20, "PID doesn't exist.")
 
-		self.processes[pid].threads.append(thread)
+		self.processes[pid].threads[len(self.processes[pid].threads)] = thread
+		self.processes[pid].threads[len(self.processes[pid].threads) - 1].tid = len(self.processes[pid].threads) - 1
 
-		return (0, len(self.processes[pid]))
+		return (0, len(self.processes[pid].threads) - 1)
 
 	def process_terminate(self, pid):
 
@@ -2688,7 +2699,7 @@ class OperatingSystem:
 		if not pid in self.process_ids:
 			return (20, "PID doesn't exist.")
 
-		return self.process_create(self.processes[pid])
+		return self.process_create(copy.deepcopy(self.processes[pid]))
 
 	def thread_fork(self, pid, tid):
 
@@ -2702,7 +2713,7 @@ class OperatingSystem:
 		if not tid in self.processes[pid].threads:
 			return (21, "TID dosen't exist.")
 
-		return self.thread_create(pid, self.processes[pid].threads[tid])
+		return self.thread_create(pid, copy.deepcopy(self.processes[pid].threads[tid]))
 
 	def thread_await(self, pid, tid):
 
@@ -2881,13 +2892,23 @@ class OperatingSystem:
 			elif syscallid == 5:
 				# Fork the current process
 				exitcode = self.process_fork(pid)
-				# Put the PID into RBX
-				self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[1], 4, byteorder='little')
+				if exitcode[0] == 0:
+					# Put the PID into RBX
+					self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[1], 4, byteorder='little')
+					# Set the other processes waiting attribute
+					self.processes[exitcode[1]].theads[tid].waiting = False
+					# Give the new process the exit code
+					self.processes[exitcode[1]].threads[tid].registers['RAX'].data[0 : 4] = bytes(4)
 			elif syscallid == 6:
 				# Fork the current thread
 				exitcode = self.thread_fork(pid, tid)
-				# Put the TID into RBX
-				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(exitcode[1], 4, byteorder='little')
+				if exitcode[0] == 0:
+					# Put the TID into RBX
+					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(exitcode[1], 4, byteorder='little')
+					# Set the other thread's waiting attribute
+					self.processes[pid].threads[exitcode[1]].waiting = False
+					# Give the new thread the exit code
+					self.processes[pid].threads[exitcode[1]].registers['RAX'].data[0 : 4] = bytes(4)
 			elif syscallid == 7:
 				# Get the current PID and put it into RBX
 				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(pid, 4, byteorder='little')
@@ -3104,7 +3125,7 @@ class OperatingSystem:
 					self.processes[pid].state = 't'
 					self.processes[pid].output = self.processes[pid].threads[tid].output
 				# Check for process ending
-				elif not all([self.processes[pid].threads[t].running for t in self.processes[pid].threads]):
+				elif all([not self.processes[pid].threads[t].running for t in self.processes[pid].threads]):
 					# All threads are done
 					self.processes[pid].state = 't'
 					self.processes[pid].output = (0, None)
@@ -3420,7 +3441,7 @@ class PThread:
 
 		"""Get the string representation of the process."""
 
-		return "<PThread tid " + str(self.tid) + " running " + self.running + ">"
+		return "<PThread TID " + str(self.tid) + " running" * self.running + ">"
 
 	def __str__(self):
 
@@ -3955,16 +3976,19 @@ code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 # Create library 0
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
+# code = bytearray(b'\x0b\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x0b\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$\x0c\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x0c\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # Create and run library 0
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0e\x00\x00\x00\x00\x00\x01\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\r\x00\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00$*\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00!\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00')
 # code2 = bytearray(b'\x00\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x00\x00\x00\x00$')
 # Puts a number into heap
-code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0f\x00\x00\x00$\x00\x03\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00E\x00\x00\x00')
+# code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x0f\x00\x00\x00$\x00\x03\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00E\x00\x00\x00')
+# Fork the thread
+code = bytearray(b'\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x08\x00\x00\x00$3\x00\x01\x02\x04\x00\x00\x00\xa4\x00\x00\x00\x02\x04\x00\x00\x00\x02\x00\x00\x00\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x04\x00\x00\x00\x02\x04\x00\x00\x00\x06\x00\x00\x00$3\x18\x00\x03\x02\x04\x00\x00\x00\x00\x00\x00\x00\x02\x04\x00\x00\x00\x02\x00\x00\x00\x01\x02\x04\x00\x00\x00\xa4\x00\x00\x00\x02\x04\x00\x00\x00\x02\x00\x00\x00\x1c\x02\x04\x00\x00\x00\xa4\x00\x00\x00\x1f\x02\x04\x00\x00\x00\xa4\x00\x00\x00')
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
 # processmemory = ProcessMemory(code, b'Hello!', b'')
-processmemory = ProcessMemory(code, b'Hello, world!\n', b'')
+processmemory = ProcessMemory(code, b'\x00\x00', b'')
 processmemory2 = ProcessMemory(code2, b'\x00\x00\x00\x00', b'')
 print(processmemory)
 print()
@@ -4019,6 +4043,7 @@ print(computer.operatingsystem.processes)
 print(computer.memory.memorypartitions[('proc', 0)].stack.data)
 print(computer.memory.memorypartitions[('proc', 0)].data.data)
 print(computer.operatingsystem.processes[0].stdout.data)
+print(computer.operatingsystem.processes[0].threads)
 print(computer.memory.memorypartitions)
 # computer.operatingsystem.process_await(pid2)
 # print(computer.operatingsystem.processes[1].threads[0].output)

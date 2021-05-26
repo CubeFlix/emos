@@ -1,0 +1,32 @@
+# FORK System Call Test
+
+# Global variables
+[.data]
+[tid] [2d0]
+
+# Begin code
+[.code]
+
+# Get the current TID
+MOV REG[RAX, [0] : [4]], [8]
+SYS
+EIR
+
+# RBX contains the TID
+MOV MEM[SYM[tid] : [2]], REG[RBX, [0] : [2]]
+
+# Fork the current thread
+MOV REG[RAX, [0] : [4]], [6]
+SYS
+EIR
+
+# Compare RBX (new TID) to our old TID
+CMP REG[RBX, [0] : [2]], MEM[SYM[tid] : [2]]
+
+JE SYM[thread0]
+
+JNE SYM[thread1]
+
+[thread0]
+
+[thread1]
