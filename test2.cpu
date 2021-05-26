@@ -1,0 +1,14 @@
+# Function test in EMOS
+
+PUSH [4]
+CALL SYM[func]
+PUSH REG[RAX, [0x0] : [0x4]]
+HLT [0x0]
+
+[func] # Function definition
+
+ARGN REG[RAX, [0x0] : [0x4]], [0x0] # Argument 0 into RAX
+ADD REG[RAX, [0x0] : [0x4]], [0x2], MEM[REG[ES, [0x4] : [0x4]] : [0x4]] # Define an integer in the function being arg0 + 2
+POP REG[RAX, [0x0] : [0x4]] # Value into RAX for final output
+SUB REG[RAX, [0x0] : [0x4]], [0x3], REG[RAX, [0x0] : [0x4]] # Subtract 2 from final output
+RET

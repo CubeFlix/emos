@@ -1100,7 +1100,7 @@ class Compiler:
 # <iolib>
 # '''
 
-code = '''<"test.cpu">'''
+code = '''<"test2.cpu">'''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
