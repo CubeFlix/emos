@@ -29,4 +29,22 @@ JNE SYM[thread1]
 
 [thread0]
 
+MOV REG[RBX, [0x0] : [0x4]], REG[ES, [0x4] : [0x4]]
+PUSHN ["Thread 0\n"]
+
+MOV REG[RAX, [0x0] : [0x4]], [1]
+MOV REG[RCX, [0x0] : [0x4]], [9]
+SYS
+
+HLT REG[RAX, [0x0] : [0x2]]
+
 [thread1]
+
+MOV REG[RBX, [0x0] : [0x4]], REG[ES, [0x4] : [0x4]]
+PUSHN ["Thread 1\n"]
+
+MOV REG[RAX, [0x0] : [0x4]], [1]
+MOV REG[RCX, [0x0] : [0x4]], [9]
+SYS
+
+HLT REG[RAX, [0x0] : [0x2]]

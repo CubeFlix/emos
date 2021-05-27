@@ -1100,7 +1100,8 @@ class Compiler:
 # <iolib>
 # '''
 
-code = '''<"test2.cpu">'''
+code = '''<"test.cpu">\n'''
+
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
@@ -1112,7 +1113,8 @@ except Exception as e:
 	print(e)
 	print(a.code)
 a.compile()
-print(a.compiled)
-print(a.data_index)
-print(a.code)
-print(a.tree)
+# print(a.compiled)
+# print(a.data_index)
+# print(a.code)
+# print(a.tree)
+print(len(a.compiled))
