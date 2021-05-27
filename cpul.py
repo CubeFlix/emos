@@ -1405,7 +1405,7 @@ class CPUCore:
 		"""Jump to addr if the equal or less than flag is on.
 		   Args: addr -> the address to jump to if the equal or less than flag is on"""
 
-		if self.registers['RFLAGS'].data[7] == 1 or lf.registers['RFLAGS'].data[5] == 1:
+		if self.registers['RFLAGS'].data[7] == 1 or self.registers['RFLAGS'].data[5] == 1:
 			return self.jmp(addr)
 		return (0, None)
 
@@ -1414,7 +1414,7 @@ class CPUCore:
 		"""Jump to addr if the equal or greater than flag is on.
 		   Args: addr -> the address to jump to if the equal or greater than flag is on"""
 
-		if self.registers['RFLAGS'].data[7] == 1 or lf.registers['RFLAGS'].data[6] == 1:
+		if self.registers['RFLAGS'].data[7] == 1 or self.registers['RFLAGS'].data[6] == 1:
 			return self.jmp(addr)
 		return (0, None)
 
@@ -1658,6 +1658,66 @@ class CPUCore:
 
 		return (0, None)
 
+	def move_less(self, dest, src):
+
+		"""Move if the less than flag is on.
+		   Args: dest -> destination
+		         src -> source"""
+
+		if self.registers['RFLAGS'].data[5] == 1:
+			return self.move(dest, src)
+		return (0, None)
+
+	def move_greater(self, dest, src):
+
+		"""Move if the greater than flag is on.
+		   Args: dest -> destination
+		         src -> source"""
+
+		if self.registers['RFLAGS'].data[6] == 1:
+			return self.move(dest, src)
+		return (0, None)
+
+	def move_equal(self, dest, src):
+
+		"""Move if the equal than flag is on.
+		   Args: dest -> destination
+		         src -> source"""
+
+		if self.registers['RFLAGS'].data[7] == 1:
+			return self.move(dest, src)
+		return (0, None)
+
+	def move_less_equal(self, dest, src):
+
+		"""Move if the equal or less than flag is on.
+		   Args: deat -> destination
+		         src -> source"""
+
+		if self.registers['RFLAGS'].data[7] == 1 or self.registers['RFLAGS'].data[5] == 1:
+			return self.move(dest, src)
+		return (0, None)
+
+	def move_greater_equal(self, dest, src):
+
+		"""Move if the equal or greater than flag is on.
+		   Args: deat -> destination
+		         src -> source"""
+
+		if self.registers['RFLAGS'].data[7] == 1 or self.registers['RFLAGS'].data[6] == 1:
+			return self.move(dest, src)
+		return (0, None)
+
+	def move_not_equal(self, dest, src):
+
+		"""Move if the equal than flag is off.
+		   Args: dest -> destination
+		         src -> source"""
+
+		if not self.registers['RFLAGS'].data[7] == 1:
+			return self.move(dest, src)
+		return (0, None)
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
@@ -1711,7 +1771,13 @@ class CPUCore:
 				   48 : (bit_shift_right, 3, {'signed' : True}),
 				   49 : (bit_shift_right, 3, {'modflags' : False}),
 				   50 : (bit_shift_right, 3, {'signed' : True, 'modflags' : False}),
-				   51 : (exit_if_rax, 0, {})}
+				   51 : (exit_if_rax, 0, {}),
+				   52 : (move_less, 2, {}),
+				   53 : (move_greater, 2, {}),
+				   54 : (move_equal, 2, {}),
+				   55 : (move_less_equal, 2, {}),
+				   56 : (move_greater_equal, 2, {}),
+				   57 : (move_not_equal, 2, {})}
 
 
 	def inc_rip(self, val):
