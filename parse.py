@@ -1100,7 +1100,7 @@ class Compiler:
 # <iolib>
 # '''
 
-code = '''<"test.cpu">\n'''
+code = '''<"fizzbuzz.cpu">\n'''
 
 
 a = Compiler(code)
@@ -1113,8 +1113,7 @@ except Exception as e:
 	print(e)
 	print(a.code)
 a.compile()
-# print(a.compiled)
-# print(a.data_index)
+print(a.compiled)
+print(a.data_index)
 # print(a.code)
 # print(a.tree)
-print(len(a.compiled))

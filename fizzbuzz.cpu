@@ -1,0 +1,87 @@
+# Fizzbuzz
+
+# Data section
+[.data]
+
+# Current number
+[num] [1]
+
+# "Fizzbuzz"
+[fizzbuzzstring] ["Fizzbuzz\n"]
+
+# "Fizz"
+[fizzstring] ["Fizz\n"]
+
+# "Buzz"
+[buzzstring] ["Buzz\n"]
+
+# Code section
+[.code]
+
+# Beginning loop
+[beginloop]
+
+# Divide by 15
+DIV MEM[SYM[num] : [0x4]], [1d15], REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+
+# Check for Fizzbuzz
+CMP REG[RBX, [0x0] : [0x4]], [0x0]
+JE SYM[fizzbuzz]
+
+# Divide by 3
+DIV MEM[SYM[num] : [0x4]], [1d3], REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+
+# Check for Fizz
+CMP REG[RBX, [0x0] : [0x4]], [0x0]
+JE SYM[fizz]
+
+# Divide by 5
+DIV MEM[SYM[num] : [0x4]], [1d5], REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+
+# Check for Buzz
+CMP REG[RBX, [0x0] : [0x4]], [0x0]
+JE SYM[buzz]
+
+# Else, write number
+# TODO
+JMP SYM[loop]
+
+# Fizzbuzz
+[fizzbuzz]
+MOV REG[RAX, [0x0] : [0x1]], [0x1]
+MOV REG[RBX, [0x0] : [0x4]], SYM[fizzbuzzstring]
+MOV REG[RCX, [0x0] : [0x1]], [0x9]
+SYS
+JMP SYM[loop]
+
+# Fizz
+[fizz]
+MOV REG[RAX, [0x0] : [0x1]], [0x1]
+MOV REG[RBX, [0x0] : [0x4]], SYM[fizzstring]
+MOV REG[RCX, [0x0] : [0x1]], [0x5]
+SYS
+JMP SYM[loop]
+
+# Buzz
+[buzz]
+MOV REG[RAX, [0x0] : [0x1]], [0x1]
+MOV REG[RBX, [0x0] : [0x4]], SYM[buzzstring]
+MOV REG[RCX, [0x0] : [0x1]], [0x5]
+SYS
+JMP SYM[loop]
+
+# Loop
+[loop]
+
+# Increment num
+ADD MEM[SYM[num] : [0x4]], [0x1], MEM[SYM[num] : [0x4]]
+
+# Compare num to 100
+CMP MEM[SYM[num] : [0x4]], [1d100]
+JE SYM[end]
+JNE SYM[beginloop]
+
+# End
+[end]
+
+HLT [0x0]
