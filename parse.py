@@ -652,13 +652,13 @@ class Compiler:
 		elif atype == 'INT':
 			# Type: 2, Data: data[0]
 			self.compiled += bytearray([2]) 
-			self.compiled += int.to_bytes(len(data[0]), 4, 'little')
+			self.compiled += int.to_bytes(len(data[0]), 2, 'little')
 			self.compiled += data[0]
 		# Label/Symbol
 		elif atype == 'SYM':
 			# Type: 2, Data: zeros for now, but we will add then in later
 			self.compiled += bytearray([2])
-			self.compiled += bytearray([4, 0, 0, 0])
+			self.compiled += bytearray([4, 0])
 			# Add this label access to the label_uses
 			self.label_uses[len(self.compiled)] = data[0]
 
@@ -1115,5 +1115,8 @@ except Exception as e:
 a.compile()
 print(a.compiled)
 print(a.data_index)
+o = open('code.c', 'wb')
+o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
+o.close()
 # print(a.code)
 # print(a.tree)
