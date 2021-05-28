@@ -1718,6 +1718,43 @@ class CPUCore:
 			return self.move(dest, src)
 		return (0, None)
 
+	def pop_remove(self):
+
+		"""Pop four bytes off the stack and remove them."""
+
+		exitcode, data = self.processmemory.pop_stack()
+		# Update the memory
+		self.cpu.memory.edit_memory_partition(self.pname, self.processmemory)
+		self.cpu.computer.memory.edit_memory_partition(self.pname, self.processmemory)
+		self.cpu.computer.operatingsystem.processes[self.pname[1]].processmemory = self.processmemory
+		self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].stack = self.processmemory.stack
+
+		if exitcode != 0:
+			return (exitcode, data)
+
+		self.registers['RES'].data[4 : 8] = int.to_bytes(int.from_bytes(self.registers['RES'].data[4 : 8], byteorder='little') - 4, 4, byteorder='little')
+
+		return (0, None)
+
+	def popn_remove(self, n):
+
+		"""Pop N bytes off the stack and remove them.
+		   Args: n -> number of bytes to pop"""
+
+		n = int.from_bytes(self.handle_output(self.get(n)), byteorder='little')
+		exitcode, data = self.processmemory.popn_stack(n)
+		# Update the memory
+		self.cpu.memory.edit_memory_partition(self.pname, self.processmemory)
+		self.cpu.computer.memory.edit_memory_partition(self.pname, self.processmemory)
+		self.cpu.computer.operatingsystem.processes[self.pname[1]].processmemory = self.processmemory
+		self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].stack = self.processmemory.stack
+		if exitcode != 0:
+			return (exitcode, data)
+
+		self.registers['RES'].data[4 : 8] = int.to_bytes(int.from_bytes(self.registers['RES'].data[4 : 8], byteorder='little') - n, 4, byteorder='little')
+
+		return (0, None)
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
