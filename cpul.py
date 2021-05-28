@@ -2918,7 +2918,7 @@ class OperatingSystem:
 					# Write the data in the stack
 					self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
 					# Modify the processes registers
-					self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+					self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
 					exitcode = (0, None)
 			elif syscallid == 3:
 				# Take input from the processes STDOut, echoing back. Puts the length of the data into RAX
@@ -2929,7 +2929,7 @@ class OperatingSystem:
 					# Write the data in the stack
 					self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
 					# Modify the processes registers
-					self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+					self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
 					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
 					exitcode = (0, None)
 			elif syscallid == 4:
@@ -3576,7 +3576,7 @@ class TerminalScreen(Peripheral):
 			# Place the chars
 			self.computer.operatingsystem.processes[pid].threads[tid].stack.push(bytes(chars, ENCODING))
 			# Recalculate RES
-			self.computer.operatingsystem.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.computer.operatingsystem.processes[pid].threads[tid].stack.data), 4, byteorder='little')
+			self.computer.operatingsystem.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.computer.operatingsystem.processes[pid].threads[tid].stack.data) + self.computer.operatingsystem.processes[pid].ss, 4, byteorder='little')
 			return (0, None)
 	
 	def update_screen(self):
