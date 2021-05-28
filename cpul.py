@@ -10,7 +10,7 @@ import os, sys
 
 
 # Constants
-MAXPROCESSMEMORY = int(2 ** 32 / 4) - 1
+MAXPROCESSMEMORY = 2 ** 32 - 1
 MAXMEMORY = 2 ** 32 - 1
 ENCODING = 'utf-8'
 
@@ -3047,6 +3047,20 @@ class OperatingSystem:
 				# Free heap memory, with the ID in RBX
 				s_id = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
 				exitcode = self.free_memory(s_id)
+			elif syscallid == 17:
+				# Get the length of a heap memory section with ID in RBX, putting the length in RBX
+				s_id = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the length
+				exitcode, s_length = self.get_memory_size(s_id)
+				if exitcode == 0:
+					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(s_length, 4, byteorder='little')
+					exitcode = (0, None)
+				else:
+					exitcode = (exitcode, None)
+			elif syscallid == 18:
+				# Get the size of the given STDIn data, putting the length into RBX
+				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(self.processes[pid].stdin.data), 4, byteorder='little')
+				exitcode = (0, None)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
@@ -3986,8 +4000,8 @@ class IOLIB(DynamicLibrary):
 
 		if call == 0:
 			# Write to the processes STDOut with the beginning offset in RBX, and the length in RCX
-			begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-			length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+			begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['R8'].get_bytes(0, 4)[1], byteorder='little')
+			length = int.from_bytes(self.processes[pid].threads[tid].registers['R9'].get_bytes(0, 4)[1], byteorder='little')
 			# Get the data
 			processmemory_use = self.processes[pid].get_processmemory_thread(tid)
 			exitcode, data = processmemory_use.get_bytes(begin_offset, length)
@@ -3996,9 +4010,11 @@ class IOLIB(DynamicLibrary):
 			else:
 				# Write the data to the STDOut
 				exitcode = self.processes[pid].stdout.write(data, self.terminal)
+		elif call == 1:
+			pass
 
 		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
-		return (0, None)
+		return exitcode
 
 
 print('CREATING CODE')
