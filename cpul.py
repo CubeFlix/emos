@@ -1814,7 +1814,9 @@ class CPUCore:
 				   54 : (move_equal, 2, {}),
 				   55 : (move_less_equal, 2, {}),
 				   56 : (move_greater_equal, 2, {}),
-				   57 : (move_not_equal, 2, {})}
+				   57 : (move_not_equal, 2, {}),
+				   58 : (pop_remove, 0, {}),
+				   59 : (popn_remove, 1, {})}
 
 
 	def inc_rip(self, val):

@@ -1135,24 +1135,26 @@ class Compiler:
 # HLT [0x0]
 # '''
 
-code = '''
-MOV REG[RAX, [0x0] : [0x4]], REG[ES, [0x4] : [0x4]]
-PUSHN ["Hello, world!\n"]
-PUSH REG[RAX, [0x0] : [0x4]]
-PUSH [14]
-CALL SYM[printf]
-POP REG[RAX, [0x0] : [0x4]]
-POP REG[RAX, [0x0] : [0x4]]
-HLT [0x0]
+# code = '''
+# MOV REG[RAX, [0x0] : [0x4]], REG[ES, [0x4] : [0x4]]
+# PUSHN ["Hello, world!\n"]
+# PUSH REG[RAX, [0x0] : [0x4]]
+# PUSH [14]
+# CALL SYM[printf]
+# POP REG[RAX, [0x0] : [0x4]]
+# POP REG[RAX, [0x0] : [0x4]]
+# HLT [0x0]
+# 
+# [printf]
+# MOV REG[RAX, [0x0] : [0x1]], [0x1]
+# ARGN REG[RBX, [0x0] : [0x4]], [0x1]
+# ARGN REG[RCX, [0x0] : [0x4]], [0x0]
+# SYS
+# EIR
+# RET
+# '''
 
-[printf]
-MOV REG[RAX, [0x0] : [0x1]], [0x1]
-ARGN REG[RBX, [0x0] : [0x4]], [0x1]
-ARGN REG[RCX, [0x0] : [0x4]], [0x0]
-SYS
-EIR
-RET
-'''
+code = '''<"test3.cpu">'''
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
 # abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 
