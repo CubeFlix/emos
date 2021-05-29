@@ -1154,7 +1154,7 @@ class Compiler:
 # RET
 # '''
 
-code = '''<"test3.cpu">'''
+code = '''<"test4.cpu">'''
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
 # abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 

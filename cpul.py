@@ -295,6 +295,8 @@ class MemorySection:
 			return (5, "Offset is not in memory.")
 
 		self.data = self.data[ : offset] + data + self.data[offset + len(data) : ]
+		self.size += len(data)
+
 		return (0, None)
 
 	def __repr__(self):
@@ -738,17 +740,17 @@ class CPUCore:
 			srcexitcode = 0
 			srcdata = src[1][0]
 			return (srcexitcode, srcdata)
-		elif desttype == 'heap':
+		elif srctype == 'heap':
 			# Heap memory destination
-			memId = int.from_bytes(dest[1][0], byteorder='little')
-			memOffset = int.from_bytes(dest[1][1], byteorder='little')
-			memSize = int.from_bytes(dest[1][2], byteorder='little')
+			memId = int.from_bytes(src[1][0], byteorder='little')
+			memOffset = int.from_bytes(src[1][1], byteorder='little')
+			memSize = int.from_bytes(src[1][2], byteorder='little')
 			return self.cpu.computer.operatingsystem.get_memory(memId, memOffset, memSize)
 		elif srctype == 'perp':
 			# Peripheral memory source
-			memId = int.from_bytes(dest[1][0], byteorder='little')
-			memOffset = int.from_bytes(dest[1][1], byteorder='little')
-			memSize = int.from_bytes(dest[1][2], byteorder='little')
+			memId = int.from_bytes(src[1][0], byteorder='little')
+			memOffset = int.from_bytes(src[1][1], byteorder='little')
+			memSize = int.from_bytes(src[1][2], byteorder='little')
 
 			if not ('perp', memId) in self.cpu.computer.memory.memorypartitions:
 				return (23, "Memory ID is not in the computer memory.")
@@ -763,9 +765,9 @@ class CPUCore:
 			return (0, newData)
 		elif srctype == 'pmem':
 			# Get a different processes memory
-			memId = int.from_bytes(dest[1][0], byteorder='little')
-			memOffset = int.from_bytes(dest[1][1], byteorder='little')
-			memSize = int.from_bytes(dest[1][2], byteorder='little')
+			memId = int.from_bytes(src[1][0], byteorder='little')
+			memOffset = int.from_bytes(src[1][1], byteorder='little')
+			memSize = int.from_bytes(src[1][2], byteorder='little')
 
 			if destlength != len(srcdata) or self.cpu.computer.memory.memorypartitions[('proc', memId)].ss < memOffset:
 				return (17, "Memory section is not large enough to hold given data.")
@@ -773,9 +775,11 @@ class CPUCore:
 			if not ('proc', memId) in self.cpu.computer.memory.memorypartitions:
 				return (23, "Memory ID is not in the computer memory.")
 
-			destexitcode, msg = self.cpu.computer.memory.memorypartitions[('proc', memId)].get_bytes(srcdata, destoffset)
-			if destexitcode != 0:
-				return (destexitcode, msg)
+			srcexitcode, msg = self.cpu.computer.memory.memorypartitions[('proc', memId)].get_bytes(srcdata, destoffset)
+			if srcexitcode != 0:
+				return (srcexitcode, msg)
+
+			return (0, msg)
 		else:
 			return (14, "Not a supported source data type.")
 
@@ -2678,7 +2682,7 @@ class OperatingSystem:
 			return (exitcode, size)
 
 		# Get data
-		exitcode, current_data = self.get_memory(mem_id, start_offset, size)
+		exitcode, current_data = self.get_memory(mem_id, 0, size)
 		if exitcode != 0:
 			return (exitcode, current_data)
 
