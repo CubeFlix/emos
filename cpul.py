@@ -1759,6 +1759,35 @@ class CPUCore:
 
 		return (0, None)
 
+	def varn(self, dest, n):
+
+		"""Get variable number N from the stack.
+		   Args: dest -> destination
+		         n -> variable number"""
+
+		n = int.from_bytes(self.handle_output(self.get(n)), byteorder='little')
+		# Get the offset and data
+		offset = int.from_bytes(self.registers['RES'].data[4 : 8], byteorder='little') - 4 * (n + 1)
+		if offset < self.processmemory.ss:
+			return (2, "Offset not in stack range.")
+		# Move the data
+		return self.move(dest, ('mem', (int.to_bytes(offset, 4, byteorder='little'), b'\x04')))
+
+	def offset_get(self, dest, offset, n):
+
+		"""Get N bytes from the position ES - offset, and put it into dest.
+		   Args: dest -> destination
+		         offset -> offset
+		         n -> number of bytes"""
+
+		n = self.handle_output(self.get(n))
+		offset = int.from_bytes(self.handle_output(self.get(offset)), byteorder='little')
+		offset = int.from_bytes(self.registers['RES'].data[4 : 8], byteorder='little') - offset
+		if offset < 0:
+			return (2, "Offset not in range.")
+		# Move the data
+		return self.move(dest, ('mem', (int.to_bytes(offset, 4, byteorder='little'), n)))
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
@@ -1820,7 +1849,9 @@ class CPUCore:
 				   56 : (move_greater_equal, 2, {}),
 				   57 : (move_not_equal, 2, {}),
 				   58 : (pop_remove, 0, {}),
-				   59 : (popn_remove, 1, {})}
+				   59 : (popn_remove, 1, {}),
+				   60 : (varn, 2, {}),
+				   61 : (offset_get, 3, {})}
 
 
 	def inc_rip(self, val):

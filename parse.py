@@ -9,7 +9,7 @@ CHARS_HEX = '0123456789abcdefABCDEF'
 CHARS_DEC = '0123456789'
 MNEMONIC_LIST = ['MOV', 'ADD', 'SUB', 'MUL', 'SMUL', 'DIV', 'SDIV', 'AND', 'OR', 'XOR', 'NOT', 'PUSH', 'POP', 'ADDF', 'SUBF', 'MULF', 'SMULF', 'DIVF', 'SDIVF', 'ANDF', 'ORF', 'XORF', 'NOTF', 'JMP', 'CMP', 'SCMP', 'JL', 'JG',
 				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB', 'BSL', 'ASL', 'BSLF', 'ASLF', 'BSR', 'ASR', 'BSRF', 'ASRF', 'EIR', 'ML', 'MG', 'ME', 'MLE', 'MGE', 
-				 'MNE', 'POPR', 'POPNR']
+				 'MNE', 'POPR', 'POPNR', 'VARN', 'OFFSG']
 STD_LIBS = ['IOLIB']
 
 class ParseError(Exception):
@@ -1154,7 +1154,7 @@ class Compiler:
 # RET
 # '''
 
-code = '''<"test4.cpu">'''
+code = '''<"print_heap.cpu">'''
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
 # abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 
@@ -1170,5 +1170,6 @@ print(a.data_index)
 o = open('code.c', 'wb')
 o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
 o.close()
+print(len(a.compiled))
 # print(a.code)
 # print(a.tree)
