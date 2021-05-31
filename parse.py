@@ -27,7 +27,7 @@ class Compiler:
 		"""Create the Compiler.
 		   Args: code -> code to parse and compile
 		         filesys -> the file system to load other files from. 'comp' is for computer, and 'emos' is for EMOS. 
-		         emps -> the operating system to retrieve files from"""
+		         emos -> the operating system to retrieve files from"""
 
 		self.code = code
 		self.filesys = filesys
@@ -484,6 +484,36 @@ class Compiler:
 			if self.next_char() != ']':
 				raise ParseError('Missing \']\'')
 			return ['PERP', arg]
+		# Check if the type is a 'R' or lower shorthand register type
+		elif type_data == 'R':
+			# Parse a shorthand register bit i.e. R[RAX] -> REG[RAX, [0x0] : [0x4]]
+			# Get opening bracket
+			if self.next_char() != '[':
+				raise ParseError('Missing \'[\'')
+			# Get the register name
+			self.parse_through_whitespace_nonewline()
+			reg_id = REGISTER_NAMES.index(self.parse_until_non_alphanumeric().upper())
+			arg.append(reg_id)
+			# Get ending bracket
+			self.parse_through_whitespace_nonewline()
+			if self.next_char() != ']':
+				raise ParseError('Missing \']\'')
+			return ['R', arg]
+		# Check if the type is a 'U' or upper shorthand register type
+		elif type_data == 'U':
+			# Parse a shorthand register bit i.e. U[RAX] -> REG[RAX, [0x4] : [0x4]]
+			# Get opening bracket
+			if self.next_char() != '[':
+				raise ParseError('Missing \'[\'')
+			# Get the register name
+			self.parse_through_whitespace_nonewline()
+			reg_id = REGISTER_NAMES.index(self.parse_until_non_alphanumeric().upper())
+			arg.append(reg_id)
+			# Get ending bracket
+			self.parse_through_whitespace_nonewline()
+			if self.next_char() != ']':
+				raise ParseError('Missing \']\'')
+			return ['U', arg]
 		else:
 			raise ParseError('Undefined type.')
 
@@ -677,6 +707,16 @@ class Compiler:
 			self.compile_arg(data[0]) 
 			self.compile_arg(data[1])
 			self.compile_arg(data[2])
+		# Lower register
+		elif atype == 'R':
+			# Type: 5, RegName: data[0]
+			self.compiled += bytearray([5])
+			self.compiled += bytearray([data[0]])
+		# Upper register
+		elif atype == 'U':
+			# Type: 6, RegName: data[0]
+			self.compiled += bytearray([6])
+			self.compiled += bytearray([data[0]])
 
 	def compile_data(self, data):
 
@@ -1154,7 +1194,19 @@ class Compiler:
 # RET
 # '''
 
-code = '''<"print_heap.cpu">'''
+# code = '''
+# [start_loop]
+# ADD R[RAX], [0x1], R[RAX]
+# CMP R[RAX], [1d100]
+# JL SYM[start_loop]
+# HLT [0x0]
+# '''
+
+# code = '''
+# PUSH [4]
+# POPNR [0x0]'''
+
+code = '''<"echo_name.cpu">'''
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
 # abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 
@@ -1167,9 +1219,9 @@ except Exception as e:
 a.compile()
 print(a.compiled)
 print(a.data_index)
-o = open('code.c', 'wb')
-o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
-o.close()
+# o = open('code.c', 'wb')
+# o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
+# o.close()
 print(len(a.compiled))
 # print(a.code)
 # print(a.tree)

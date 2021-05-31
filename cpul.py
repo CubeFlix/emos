@@ -256,6 +256,9 @@ class MemorySection:
 		"""Pop n bytes from the memory.
 		   Args: n -> number of bytes to pop"""
 
+		if n == 0:
+			return (0, b'')
+
 		if self.size < n:
 			# Size is less than n
 			return (3, "Stack is not large enough.")
@@ -646,15 +649,13 @@ class CPUCore:
 
 	"""The main 32 bit CPU core class."""
 	
-	def __init__(self, cpu, speed=None):
+	def __init__(self, cpu):
 
 		"""Create the CPU core.
-		   Args: cpu -> the CPU the core is attached to
-		   		 speed -> the speed in Hertz or none"""
+		   Args: cpu -> the CPU the core is attached to"""
 
 		self.cpu = cpu
 		self.alu = ALU()
-		self.speed = speed
 
 	def initialize(self, processmemory, name, tid):
 
@@ -1948,6 +1949,18 @@ class CPUCore:
 			perp_length = self.handle_output(self.get(self.handle_output(self.parse_argument())))
 
 			return (0, ('perp', (perp_id, perp_offset, perp_length)))
+		elif arg_type == 5:  # Lower shorthand register
+			# Get register suffix
+			reg_suf = list(self.registers.keys())[int.from_bytes(self.handle_output(self.get_current_code_bytes(1)), byteorder='little')][1 : ]
+			self.inc_rip(1)
+
+			return (0, ('reg', (reg_suf, b'\x00', b'\x04')))
+		elif arg_type == 6:  # Upper shorthand register
+			# Get register suffix
+			reg_suf = list(self.registers.keys())[int.from_bytes(self.handle_output(self.get_current_code_bytes(1)), byteorder='little')][1 : ]
+			self.inc_rip(1)
+
+			return (0, ('reg', (reg_suf, b'\x04', b'\x04')))
 		else:
 			return (14, "Not a supported data type.")
 
@@ -1964,16 +1977,12 @@ class CPUCore:
 			args = []
 			for arg in range(n_args):
 				args.append(self.handle_output(self.parse_argument()))
-			if n_args != len(args):
-				self.handle_output((25, "Not enough arguments."))
 			# Run the opcode
 			try:
 				self.handle_output(func(*([self] + args), **d_args))
 			except Interrupt as e:
 				self.running = False
 				return
-			if self.speed:
-				time.sleep(1 / self.speed)
 
 		if not self.cpu.computer.operatingsystem.processes[self.pname[1]].threads[self.tid].waiting and self.running:
 			# Exitcode 0
@@ -2002,16 +2011,12 @@ class CPUCore:
 			args = []
 			for arg in range(n_args):
 				args.append(self.handle_output(self.parse_argument()))
-			if n_args != len(args):
-				self.handle_output((25, "Not enough arguments."))
 			# Run the opcode
 			try:
 				self.handle_output(func(*([self] + args), **d_args))
 			except Interrupt as e:
 				# Catch interrupts
 				return
-			if self.speed:
-				time.sleep(1 / self.speed)
 
 			num_executed += 1
 
@@ -2042,7 +2047,7 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 2, 2)[1], byteorder='little'), str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 3, 2)[1], byteorder='little'), str(e))
 				self.running = False
 				self.error = True
 		except Exception as e:
@@ -2084,7 +2089,7 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 2, 2)[1], byteorder='little'), str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 3, 2)[1], byteorder='little'), str(e))
 				self.error = True
 		except Exception as e:
 			# Catch internal errors
@@ -4094,7 +4099,8 @@ class IOLIB(DynamicLibrary):
 print('CREATING CODE')
 print()
 # This code counts to 100 (chr 'd') in the DATA section
-code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x01\x01\x00\n\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x04\x18\x01\x00\n\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x64\x1a\x02\x04\x00\x00\x00\x00\x00')
+# code2 = bytearray(b'\x01\x01\x00\n\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x01\x01\x00\n\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x04\x18\x01\x00\n\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x04\x02\x01\x00\x64\x1a\x02\x04\x00\x00\x00\x00\x00')
+code2 = bytearray(b'\x01\x05\x00\x02\x01\x00\x01\x05\x00\x18\x05\x00\x02\x01\x00d\x1a\x02\x04\x00\x00\x00\x00\x00!\x02\x01\x00\x00')
 
 # code = bytearray(b'\x00\x01\x00\x05\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x04\x00\x00\x00\x0b\x02\x04\x00\x00\x00\x08\x00\x00\x00\x17\x02\x04\x00\x00\x004\x00\x00\x00!\x0c\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x0c\x00\x03\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x01\x00\x00\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x00\x03\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x00\x01\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x0b\x00\x01\x02\x01\x00\x00\x00\x00\x02\x01\x00\x00\x00\x04\x17\x02\x04\x00\x00\x003\x00\x00\x00')
 # code = bytearray(b'\x00\x01\x00\x05\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x04\x00\x00\x00"\x02\x04\x00\x00\x00*\x00\x00\x00!\x02\x00\x05\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x04\x00\x00\x00\x0c\x00\x00\x00\x00\x06\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x01\x01\x00\x06\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x04\x02\x01\x00\x00\x00\x01\x01\x02\x04\x00\x00\x00}\x00\x00\x00\x02\x01\x00\x00\x00\x04#')
@@ -4216,4 +4222,5 @@ print(computer.operatingsystem.processes)
 print(computer.operatingsystem.processes[1].processmemory.stack.data)
 print(computer.operatingsystem.processes[1].output)
 # print(computer.memory.memorypartitions[('mem', 0)].data)
+# print(computer.memory.memorypartitions[('mem', 1)].data)
 computer.operatingsystem.stop_os()

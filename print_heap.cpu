@@ -1,32 +1,32 @@
-JMP SYM[main]
+# JMP SYM[main]
 
 [print_heap]
-ARGN REG[RAX, [0x0] : [0x4]], [0x2]
-ARGN REG[RBX, [0x0] : [0x4]], [0x1]
-ARGN REG[RCX, [0x0] : [0x4]], [0x0]
-PUSHN HEAP[REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]] : REG[RCX, [0x0] : [0x4]]]
-MOV REG[RAX, [0x0] : [0x1]], [0x1]
-SUB REG[ES, [0x4] : [0x4]], REG[RCX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+ARGN R[RAX], [2]
+ARGN R[RBX], [1]
+ARGN R[RCX], [0]
+PUSHN HEAP[R[RAX], R[RBX] : R[RCX]]
+MOV R[RAX], [1]
+SUB U[ES], R[RCX], R[RBX]
 SYS
 EIR
-POPNR REG[RCX, [0x0] : [0x4]]
+POPNR R[RCX]
 RET
 
-[malloc]
-MOV REG[RAX, [0x0] : [0x1]], [1d15]
-SYS
-EIR
-MOV REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
-RET
+# [malloc]
+# MOV REG[RAX, [0x0] : [0x1]], [1d15]
+# SYS
+# EIR
+# MOV REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+# RET
 
-[main]
-CALL SYM[malloc]
-MOV HEAP[REG[RAX, [0x0] : [0x4]], [0x0] : [1d14]], ["Hello, world!\n"]
-PUSH REG[RAX, [0x0] : [0x4]]
-PUSH [0]
-PUSH [14]
-CALL SYM[print_heap]
-POPR
-POPR
-POPR
-HLT [0x0]
+# [main]
+# CALL SYM[malloc]
+# MOV HEAP[REG[RAX, [0x0] : [0x4]], [0x0] : [1d14]], ["Hello, world!\n"]
+# PUSH REG[RAX, [0x0] : [0x4]]
+# PUSH [0]
+# PUSH [14]
+# CALL SYM[print_heap]
+# POPR
+# POPR
+# POPR
+# HLT [0x0]

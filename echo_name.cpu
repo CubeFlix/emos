@@ -1,0 +1,66 @@
+JMP SYM[main]
+
+<"print_heap.cpu">
+
+[malloc]
+MOV R[RAX], [15]
+SYS
+EIR
+MOV R[RAX], R[RBX]
+RET
+
+[input]
+MOV R[RAX], [3]
+SYS
+EIR
+PUSH R[RBX]
+CALL SYM[malloc]
+POP R[RBX]
+POPN HEAP[R[RAX], [0x0] : R[RBX]], R[RBX]
+RET
+
+[main]
+MOV R[RAX], [1]
+MOV R[RBX], U[ES]
+MOV R[RCX], [24]
+PUSHN ["Please enter your name: "]
+SYS
+EIR
+
+CALL SYM[input]
+PUSH R[RAX]
+MOV R[RDI], R[RAX]
+
+CALL SYM[malloc]
+MOV HEAP[R[RAX], [0x0] : [0x7]], ["Hello, "]
+PUSH R[RAX]
+MOV R[RAX], [17]
+MOV R[RBX], R[RDI]
+SYS
+EIR
+
+POP R[RAX]
+POP R[RCX]
+
+MOV HEAP[R[RAX], [0x7] : R[RBX]], HEAP[R[RCX], [0x0] : R[RBX]]
+ADD R[RBX], [0x7], R[RBX]
+MOV HEAP[R[RAX], R[RBX] : [0x2]], ["!\n"]
+
+PUSH R[RAX]
+PUSH [0]
+ADD R[RBX], [0x2], R[RBX]
+PUSH R[RBX]
+
+MOV R[RAX], [1]
+MOV R[RBX], U[ES]
+PUSHN ["\n"]
+MOV R[RCX], [1]
+SYS
+EIR
+
+POPNR [0x1]
+
+CALL SYM[print_heap]
+EIR
+
+HLT [0x0]
