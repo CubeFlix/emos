@@ -10,13 +10,15 @@ CHARS_DEC = '0123456789'
 MNEMONIC_LIST = ['MOV', 'ADD', 'SUB', 'MUL', 'SMUL', 'DIV', 'SDIV', 'AND', 'OR', 'XOR', 'NOT', 'PUSH', 'POP', 'ADDF', 'SUBF', 'MULF', 'SMULF', 'DIVF', 'SDIVF', 'ANDF', 'ORF', 'XORF', 'NOTF', 'JMP', 'CMP', 'SCMP', 'JL', 'JG',
 				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB', 'BSL', 'ASL', 'BSLF', 'ASLF', 'BSR', 'ASR', 'BSRF', 'ASRF', 'EIR', 'ML', 'MG', 'ME', 'MLE', 'MGE', 
 				 'MNE', 'POPR', 'POPNR', 'VARN', 'OFFSG']
-STD_LIBS = ['IOLIB']
+STD_LIBS = ['ISLIB', 'WRITELIB']
+
 
 class ParseError(Exception):
 
 	"""A base error for all parsing exceptions."""
 
 	pass
+
 
 class Compiler:
 
@@ -1206,7 +1208,22 @@ class Compiler:
 # PUSH [4]
 # POPNR [0x0]'''
 
-code = '''<"echo_name.cpu">'''
+# code = '''<"echo_name.cpu">'''
+
+code = '''
+
+<ISLIB>
+
+MOV R[R9], [123]
+LIB [0x0], [0x0]
+EIR
+MOV R[RCX], R[RBX]
+SUB U[ES], R[RBX], R[RBX]
+MOV R[RAX], [1]
+SYS
+EIR
+'''
+
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
 # abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 
@@ -1219,9 +1236,9 @@ except Exception as e:
 a.compile()
 print(a.compiled)
 print(a.data_index)
-# o = open('code.c', 'wb')
-# o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
-# o.close()
+o = open('code.c', 'wb')
+o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
+o.close()
 print(len(a.compiled))
 # print(a.code)
 # print(a.tree)

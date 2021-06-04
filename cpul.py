@@ -2047,7 +2047,7 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 3, 2)[1], byteorder='little'), str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 2, 2)[1], byteorder='little'), str(e))
 				self.running = False
 				self.error = True
 		except Exception as e:
@@ -2089,7 +2089,7 @@ class CPUCore:
 				# Catch exits
 				self.cpu.update_from_computer()
 				self.processmemory = self.cpu.memory.memorypartitions[self.pname]
-				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 3, 2)[1], byteorder='little'), str(e))
+				self.output_exit = (int.from_bytes(self.processmemory.get_bytes(self.processmemory.es - 2, 2)[1], byteorder='little'), str(e))
 				self.error = True
 		except Exception as e:
 			# Catch internal errors
@@ -2636,7 +2636,7 @@ class OperatingSystem:
 		self.running = False
 
 		# Maximum number of operations to run on each thread if no IO is involved
-		self.max_operations_per_thread = 100
+		self.max_operations_per_thread = 64
 
 		# Terminal
 		self.terminal = Terminal(self.computer)
@@ -2644,7 +2644,7 @@ class OperatingSystem:
 		self.kernel_stdout = STDOut()
 
 		# System libraries (TODO)
-		self.syslibs = [IOLIB]
+		self.syslibs = [INT_STR_LIB, WRITELIB]
 
 	def set_max_thread_operations(self, max_operations_per_thread):
 
@@ -2727,7 +2727,7 @@ class OperatingSystem:
 			new_data = current_data[ : start_offset] + data
 		# Too large, and starts out of bounds (padding with zero bytes)
 		elif start_offset + len(data) > size and start_offset > size:
-			new_data = current_data + bytes(start_offset - size) + new_data
+			new_data = current_data + bytes(start_offset - size) + data
 		# Within bounds
 		else:
 			# New data
@@ -4057,20 +4057,11 @@ class STDErr:
 	"""The basic standard error class. (Saved to a file)"""
 
 
-class IOLIB(DynamicLibrary):
+class INT_STR_LIB(DynamicLibrary):
 
 	defined_calls = [0]
 
-	# Print from process memory (length required)
-	# Print from process memory (null-terminated)
-	# Print from heap memory (length required)
-	# Print from heap memory (null-terminated)
-	# Get chars (length in R8) into stack
-	# Get input into stack (length put into RBX)
-	# Integer to string
-	# String to integer
-
-	"""I/O (Input/Output) tools library."""
+	"""Integer and string conversion library."""
 
 	def handle(self, call):
 
@@ -4078,23 +4069,82 @@ class IOLIB(DynamicLibrary):
 		   Args: call -> the call ID to run"""
 
 		if call == 0:
-			# Write to the processes STDOut with the beginning offset in RBX, and the length in RCX
-			begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['R8'].get_bytes(0, 4)[1], byteorder='little')
-			length = int.from_bytes(self.processes[pid].threads[tid].registers['R9'].get_bytes(0, 4)[1], byteorder='little')
-			# Get the data
-			processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-			exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+			# Take an integer value from R9, convert it into a decimal string, and put the string into the stack, along with the length of the string in RBX
+			value = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R9'].data[0 : 4], byteorder='little')
+			# Get the string representation
+			str_value = bytes(str(value), ENCODING)
+			# Place the string into the stack
+			self.operatingsystem.processes[self.pid].threads[self.tid].stack.push(str_value)
+			# Modify the processes registers
+			self.operatingsystem.processes[self.pid].threads[self.tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.operatingsystem.processes[self.pid].threads[self.tid].stack.data) + self.operatingsystem.processes[self.pid].processmemory.ss, 4, byteorder='little')
+			self.operatingsystem.processes[self.pid].threads[self.tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(str_value), 4, byteorder='little')
+			# Exit code
+			exitcode = (0, None)
+		elif call == 1:
+			# Take a string (offset in R9 and length in R10) and put it's integer representation into RBX
+			offset = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R9'].data[0 : 4], byteorder='little')
+			length = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R10'].data[0 : 4], byteorder='little')
+			# Get data
+			processmemory_use = self.operatingsystem.processes[self.pid].get_processmemory_thread(self.tid)
+			exitcode, data = processmemory_use.get_bytes(offset, length)
 			if exitcode != 0:
 				exitcode = (exitcode, None)
 			else:
 				# Write the data to the STDOut
-				exitcode = self.processes[pid].stdout.write(data, self.terminal)
-		elif call == 1:
-			pass
+				int_value = int(str(data, ENCODING))
+				self.operatingsystem.processes[self.pid].threads[self.tid].registers['RBX'].data[0 : 4] = int.to_bytes(int_value, 4, byteorder='little')
+				exitcode = (0, None)
 
 		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
 		return exitcode
 
+
+class WRITELIB(DynamicLibrary):
+
+	defined_calls = [0]
+
+	"""Writing editor library."""
+
+	def handle(self, call):
+
+		"""Handle a call.
+		   Args: call -> the call ID to run"""
+
+		if call == 0:
+			# Use a simple editor to get data and put it into heap
+			data = self.editor()
+			# Create a heap memory portion
+			exitcode, heap_id = self.operatingsystem.allocate_memory()
+			if exitcode != 0:
+				exitcode = (exitcode, None)
+			else:
+				exitcode = self.operatingsystem.edit_memory(heap_id, data, 0)
+
+		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
+		return exitcode
+
+	def editor(self):
+
+		"""Take input in lines, stopping at a Ctrl-G, and return the data (process mode)."""
+
+		data = b''
+		# Continually get data
+		while True:
+			# Get a line of data
+			data += self.operatingsystem.terminal.get_input()
+			# Check for a Ctrl-G
+			if len(data) > 0 and data[-1] == 7:
+				# Stop
+				break
+			# Print a newline
+			if self.operatingsystem.terminal.state in ('proc', 'kern'):
+				self.operatingsystem.terminal.stdout.write(b'\n')
+			else:
+				self.operatingsystem.termianl.print_terminal(b'\n')
+			data += b'\n'
+
+		# Return the data
+		return data
 
 print('CREATING CODE')
 print()
