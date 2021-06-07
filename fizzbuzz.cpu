@@ -18,56 +18,72 @@
 # Code section
 [.code]
 
+# Imports
+<ISLIB>
+
 # Beginning loop
 [beginloop]
 
 # Divide by 15
-DIV MEM[SYM[num] : [0x4]], [1d15], REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+DIV MEM[SYM[num] : [0x4]], [1d15], R[RAX], R[RBX]
 
 # Check for Fizzbuzz
-CMP REG[RBX, [0x0] : [0x4]], [0x0]
+CMP R[RBX], [0x0]
 JE SYM[fizzbuzz]
 
 # Divide by 3
-DIV MEM[SYM[num] : [0x4]], [1d3], REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+DIV MEM[SYM[num] : [0x4]], [1d3], R[RAX], R[RBX]
 
 # Check for Fizz
-CMP REG[RBX, [0x0] : [0x4]], [0x0]
+CMP R[RBX], [0x0]
 JE SYM[fizz]
 
 # Divide by 5
-DIV MEM[SYM[num] : [0x4]], [1d5], REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]]
+DIV MEM[SYM[num] : [0x4]], [1d5], R[RAX], R[RBX]
 
 # Check for Buzz
-CMP REG[RBX, [0x0] : [0x4]], [0x0]
+CMP R[RBX], [0x0]
 JE SYM[buzz]
 
 # Else, write number
-# TODO
+MOV R[R9], MEM[SYM[num] : [0x4]]
+LIB [0x0], [0x0]
+EIR
+PUSHN ["\n"]
+MOV R[RAX], [1]
+ADD R[RBX], [0x1], R[RBX]
+MOV R[RCX], R[RBX]
+SUB U[ES], R[RBX], R[RBX]
+SYS
+EIR
+POPNR R[RCX]
 JMP SYM[loop]
 
 # Fizzbuzz
 [fizzbuzz]
-MOV REG[RAX, [0x0] : [0x1]], [0x1]
-MOV REG[RBX, [0x0] : [0x4]], SYM[fizzbuzzstring]
-MOV REG[RCX, [0x0] : [0x1]], [0x9]
+MOV R[RAX], [1]
+MOV R[RBX], SYM[fizzbuzzstring]
+MOV R[RCX], [9]
 SYS
+EIR
 JMP SYM[loop]
 
 # Fizz
 [fizz]
-MOV REG[RAX, [0x0] : [0x1]], [0x1]
-MOV REG[RBX, [0x0] : [0x4]], SYM[fizzstring]
-MOV REG[RCX, [0x0] : [0x1]], [0x5]
+MOV R[RAX], [1]
+MOV R[RBX], SYM[fizzstring]
+MOV R[RCX], [5]
 SYS
+EIR
 JMP SYM[loop]
 
 # Buzz
 [buzz]
-MOV REG[RAX, [0x0] : [0x1]], [0x1]
-MOV REG[RBX, [0x0] : [0x4]], SYM[buzzstring]
-MOV REG[RCX, [0x0] : [0x1]], [0x5]
+MOV R[RAX], [1]
+MOV R[RBX], SYM[buzzstring]
+MOV R[RCX], [5]
 SYS
+EIR
 JMP SYM[loop]
 
 # Loop
@@ -76,8 +92,8 @@ JMP SYM[loop]
 # Increment num
 ADD MEM[SYM[num] : [0x4]], [0x1], MEM[SYM[num] : [0x4]]
 
-# Compare num to 100
-CMP MEM[SYM[num] : [0x4]], [1d100]
+# Compare num to 20
+CMP MEM[SYM[num] : [0x4]], [1d20]
 JE SYM[end]
 JNE SYM[beginloop]
 

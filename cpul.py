@@ -4131,20 +4131,22 @@ class WRITELIB(DynamicLibrary):
 		# Continually get data
 		while True:
 			# Get a line of data
-			data += self.operatingsystem.terminal.get_input()
+			data += bytes(self.operatingsystem.terminal.get_input()[1], ENCODING)
 			# Check for a Ctrl-G
 			if len(data) > 0 and data[-1] == 7:
 				# Stop
+				data = data[ : -1]
 				break
 			# Print a newline
 			if self.operatingsystem.terminal.state in ('proc', 'kern'):
 				self.operatingsystem.terminal.stdout.write(b'\n')
 			else:
-				self.operatingsystem.termianl.print_terminal(b'\n')
+				self.operatingsystem.terminal.print_terminal(b'\n')
 			data += b'\n'
 
 		# Return the data
 		return data
+
 
 print('CREATING CODE')
 print()
@@ -4253,6 +4255,11 @@ print('RUNNING PROCESS')
 
 computer.operatingsystem.process_await(pid)
 computer.operatingsystem.terminal.remove_view()
+
+# wlib = WRITELIB(operatingsystem, 0, 0)
+# input_text = wlib.editor()
+# print(input_text)
+
 print()
 print('FINISHED PROCESS')
 print()

@@ -1,0 +1,47 @@
+# Fibonacci Series
+
+<ISLIB>
+
+[.code]
+
+# Place current value into stack
+MOV U[RAX], U[ES]
+PUSH [1]
+
+# Place last value into stack
+MOV U[RBX], U[ES]
+PUSH [1]
+
+# Beginning loop
+[beginloop]
+
+# Write the current value
+MOV R[R9], MEM[U[RAX] : [0x4]]
+
+# Change the value into a string
+LIB [0x0], [0x0]
+EIR
+
+# Add a newline
+PUSHN ["\n"]
+ADD R[RBX], [0x1], R[RBX]
+
+# Print the value
+MOV R[RAX], [1]
+MOV R[RCX], R[RBX]
+SUB U[ES], R[RBX], R[RBX]
+SYS
+EIR
+POPNR R[RCX]
+
+# Update the values
+MOV R[RAX], MEM[U[RBX] : [0x4]]
+MOV MEM[U[RBX] : [0x4]], MEM[U[RAX] : [0x4]]
+ADD R[RAX], MEM[U[RAX] : [0x4]], MEM[U[RAX] : [0x4]]
+
+# Loop
+CMP MEM[U[RAX] : [0x4]], [1d100]
+JLE SYM[beginloop]
+
+# End
+HLT [0x0]

@@ -1208,21 +1208,21 @@ class Compiler:
 # PUSH [4]
 # POPNR [0x0]'''
 
-# code = '''<"echo_name.cpu">'''
+code = '''<"fibonacci.cpu">'''
 
-code = '''
-
-<ISLIB>
-
-MOV R[R9], [123]
-LIB [0x0], [0x0]
-EIR
-MOV R[RCX], R[RBX]
-SUB U[ES], R[RBX], R[RBX]
-MOV R[RAX], [1]
-SYS
-EIR
-'''
+# code = '''
+# 
+# <ISLIB>
+# 
+# MOV R[R9], [123]
+# LIB [0x0], [0x0]
+# EIR
+# MOV R[RCX], R[RBX]
+# SUB U[ES], R[RBX], R[RBX]
+# MOV R[RAX], [1]
+# SYS
+# EIR
+# '''
 
 a = Compiler(code)
 # a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
