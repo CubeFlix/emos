@@ -4125,7 +4125,7 @@ class WRITELIB(DynamicLibrary):
 
 	def editor(self):
 
-		"""Take input in lines, stopping at a Ctrl-G, and return the data (process mode)."""
+		"""Take input in lines, stopping at a Ctrl-G, and return the data."""
 
 		data = b''
 		# Continually get data
@@ -4139,7 +4139,7 @@ class WRITELIB(DynamicLibrary):
 				break
 			# Print a newline
 			if self.operatingsystem.terminal.state in ('proc', 'kern'):
-				self.operatingsystem.terminal.stdout.write(b'\n')
+				self.operatingsystem.terminal.stdout.write(b'\n', self.operatingsystem.terminal)
 			else:
 				self.operatingsystem.terminal.print_terminal(b'\n')
 			data += b'\n'

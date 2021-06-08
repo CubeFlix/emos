@@ -643,11 +643,8 @@ class Compiler:
 				else:
 					# Library include
 					libname = self.parse_until_non_alpha().upper()
-					self.tree += [[11, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]], [11, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], 
-						['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]], [0, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], 
-						[0, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]], ['INT', [int.to_bytes(STD_LIBS.index(libname), 4, byteorder='little')]]]], [36, []], 
-						[12, [['REG', [3, ['INT', [bytearray(b'\x00\x00\x00\x00')]], ['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]], [12, [['REG', [0, ['INT', [bytearray(b'\x00\x00\x00\x00')]], 
-						['INT', [bytearray(b'\x04\x00\x00\x00')]]]]]]]
+					self.tree += [['SEC', 'code'], [11, [['R', [0]]]], [11, [['R', [3]]]], [0, [['R', [0]], ['INT', [bytearray(b'\r\x00\x00\x00')]]]], [0, [['R', [3]], ['INT', [int.to_bytes(STD_LIBS.index(libname), 4, byteorder='little')]]]], 
+									[36, []], [51, []], [12, [['R', [3]]]], [12, [['R', [0]]]]]
 					# Eat the ending char
 					self.parse_through_whitespace_nonewline()
 					if self.next_char() != '>':
@@ -1208,7 +1205,21 @@ class Compiler:
 # PUSH [4]
 # POPNR [0x0]'''
 
-code = '''<"fibonacci.cpu">'''
+# code = '''<"fibonacci.cpu">'''
+
+code = '''<WRITELIB>
+LIB [0x0], [0x0]
+'''
+
+# code = '''
+# PUSH R[RAX]
+# PUSH R[RBX]
+# MOV R[RAX], [13]
+# MOV R[RBX], [100]
+# SYS
+# EIR
+# POP R[RBX]
+# POP R[RAX]'''
 
 # code = '''
 # 
@@ -1241,4 +1252,4 @@ o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
 o.close()
 print(len(a.compiled))
 # print(a.code)
-# print(a.tree)
+print(a.tree)
