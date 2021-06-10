@@ -2506,8 +2506,11 @@ class HardDrive:
 
 		self.computer = computer
 		self.outfile = outfile
-		self.metadata = bytearray()
-		self.blocks = []
+		self.filesystem = {}
+
+	def get_full_buffer():
+
+		pass
 
 	def _backend_update(self):
 
@@ -2788,6 +2791,18 @@ class OperatingSystem:
 
 		return (0, None)
 
+	def process_resume(self, pid):
+
+		"""Resume a terminated process.
+		   Args: pid -> the process ID to resume"""
+
+		if not pid in self.process_ids:
+			return (20, "PID doesn't exist.")
+
+		self.processes[pid].state = 'r'
+
+		return (0, None)
+
 	def process_delete(self, pid):
 
 		"""Delete a process.
@@ -2806,7 +2821,7 @@ class OperatingSystem:
 
 	def thread_terminate(self, pid, tid):
 
-		"""Terminate a process.
+		"""Terminate a thread.
 		   Args: pid -> the process ID
 		         tid -> the thread ID"""
 
@@ -2820,10 +2835,27 @@ class OperatingSystem:
 
 		return (0, None)
 
-	def thread_delete(self, pid):
+	def thread_resume(self, pid, tid):
 
-		"""Delete a process.
-		   Args: pid -> the process ID to delete."""
+		"""Resume a thread.
+		   Args: pid -> the process ID
+		         tid -> the thread ID"""
+
+		if not pid in self.process_ids:
+			return (20, "PID doesn't exist.")
+
+		if not tid in self.processes[pid].threads:
+			return (21, "TID dosen't exist.")
+
+		self.processes[pid].threads[tid].running = True
+
+		return (0, None)
+
+	def thread_delete(self, pid, tid):
+
+		"""Delete a thread.
+		   Args: pid -> the process ID
+		         tid -> the thread ID"""
 
 		if not pid in self.process_ids:
 			return (20, "PID doesn't exist.")
@@ -3140,6 +3172,46 @@ class OperatingSystem:
 				# Get the size of the given STDIn data, putting the length into RBX
 				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(self.processes[pid].stdin.data), 4, byteorder='little')
 				exitcode = (0, None)
+			elif syscallid == 19:
+				# Await a processes completion with the PID in RBX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.process_await(s_pid)
+			elif syscallid == 20:
+				# Await a thread's completion with the PID in RBX and the TID in RCX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.thread_await(s_pid, s_tid)
+			elif syscallid == 21:
+				# Create a process with the size of the code section in RBX and the size of the data section in RCX, putting the PID into RBX
+				s_code = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				s_data = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Create the process object
+				s_thread = PThread(0, MemorySection('stack', 0, b''), None)
+				s_process = Process(ProcessMemory(bytes(s_code), bytes(s_data), b''), {0 : s_thread}, 't')
+				# Create the process
+				exitcode = self.process_create(s_process)
+				if exitcode[0] == 0:
+					# Successful process creation
+					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(s_length, 4, byteorder='little')
+			elif syscallid == 22:
+				# Resume a process with the PID in RBX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.process_resume(s_pid)
+			elif syscallid == 23:
+				# Resume a thread with the PID in RBX and TID in RCX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				exitcode = self.thread_resume(s_pid, s_tid)
+			elif syscallid == 24:
+				# Get a processes exit code with the PID in RBX putting the exitcode into RBX
+				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				if not s_pid in self.process_ids:
+					exitcode = (20, "PID doesn't exist.")
+				else:
+					if not hasattr(self.processes[s_pid], 'output'):
+						exitcode = (25, "Process is not finished.")
+					else:
+						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(self.processes[s_pid].output[0], 4, byteorder='little')
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)

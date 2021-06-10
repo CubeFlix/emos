@@ -1205,11 +1205,11 @@ class Compiler:
 # PUSH [4]
 # POPNR [0x0]'''
 
-# code = '''<"fibonacci.cpu">'''
+code = '''<"fibonacci.cpu">'''
 
-code = '''<WRITELIB>
-LIB [0x0], [0x0]
-'''
+# code = '''<WRITELIB>
+# LIB [0x0], [0x0]
+# '''
 
 # code = '''
 # PUSH R[RAX]
@@ -1252,4 +1252,4 @@ o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
 o.close()
 print(len(a.compiled))
 # print(a.code)
-print(a.tree)
+# print(a.tree)

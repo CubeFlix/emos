@@ -6,11 +6,11 @@
 
 # Place current value into stack
 MOV U[RAX], U[ES]
-PUSH [1]
+MOV MEM[U[ES] : [0x4]], [1]
 
 # Place last value into stack
 MOV U[RBX], U[ES]
-PUSH [1]
+MOV MEM[U[ES] : [0x4]], [1]
 
 # Beginning loop
 [beginloop]
