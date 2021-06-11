@@ -4172,6 +4172,32 @@ class INT_STR_LIB(DynamicLibrary):
 				int_value = int(str(data, ENCODING))
 				self.operatingsystem.processes[self.pid].threads[self.tid].registers['RBX'].data[0 : 4] = int.to_bytes(int_value, 4, byteorder='little')
 				exitcode = (0, None)
+		elif call == 2:
+			# Take an signed integer value from R9, convert it into a decimal string, and put the string into the stack, along with the length of the string in RBX
+			value = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R9'].data[0 : 4], byteorder='little', signed=True)
+			# Get the string representation
+			str_value = bytes(str(value), ENCODING)
+			# Place the string into the stack
+			self.operatingsystem.processes[self.pid].threads[self.tid].stack.push(str_value)
+			# Modify the processes registers
+			self.operatingsystem.processes[self.pid].threads[self.tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.operatingsystem.processes[self.pid].threads[self.tid].stack.data) + self.operatingsystem.processes[self.pid].processmemory.ss, 4, byteorder='little')
+			self.operatingsystem.processes[self.pid].threads[self.tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(str_value), 4, byteorder='little')
+			# Exit code
+			exitcode = (0, None)
+		elif call == 3:
+			# Take a string (offset in R9 and length in R10) and put it's signed integer representation into RBX
+			offset = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R9'].data[0 : 4], byteorder='little')
+			length = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R10'].data[0 : 4], byteorder='little')
+			# Get data
+			processmemory_use = self.operatingsystem.processes[self.pid].get_processmemory_thread(self.tid)
+			exitcode, data = processmemory_use.get_bytes(offset, length)
+			if exitcode != 0:
+				exitcode = (exitcode, None)
+			else:
+				# Write the data to the STDOut
+				int_value = int(str(data, ENCODING))
+				self.operatingsystem.processes[self.pid].threads[self.tid].registers['RBX'].data[0 : 4] = int.to_bytes(int_value, 4, byteorder='little', signed=True)
+				exitcode = (0, None)
 
 		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
 		return exitcode
