@@ -3212,6 +3212,12 @@ class OperatingSystem:
 						exitcode = (25, "Process is not finished.")
 					else:
 						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(self.processes[s_pid].output[0], 4, byteorder='little')
+						exitcode = (0, None)
+			elif syscallid == 25:
+				# Wait for RBX seconds
+				s_time = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				time.sleep(s_time)
+				exitcode = (0, None)
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)

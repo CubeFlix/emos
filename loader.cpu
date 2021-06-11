@@ -1,0 +1,68 @@
+# int loadproc(int heapid, int codesize) 
+# {
+# 	int datasize = hsize(heapid) - codesize;
+# 	int pid = pcreate(codesize, datasize);
+# 	pwrite(pid, hdata(heapid));
+# 	presume(pid);
+# 	return 0;
+# }
+
+# Load Process
+[loadproc]
+
+# Get heapid and codesize
+ARGN R[RAX], [1]
+ARGN R[RBX], [0]
+
+# Get datasize
+# Prepare registers
+PUSH R[RAX]
+PUSH R[RBX]
+MOV R[RBX], R[RAX]
+MOV R[RAX], [17]
+# Call system
+SYS
+EIR
+# Cauculate datasize
+MOV R[RCX], R[RBX]
+POP R[RBX]
+POP R[RAX]
+MOV U[RAX], U[ES]
+SUB R[RCX], R[RBX], MEM[U[ES] : [0x4]]
+
+# Get pid
+# Prepare registers
+PUSH R[RAX]
+PUSH R[RBX]
+MOV R[RCX], MEM[U[RAX] : [0x4]]
+# codesize is already in RBX
+MOV R[RAX], [21]
+# Call system
+SYS
+EIR
+# Finalize pid value
+MOV R[RCX], R[RBX]
+POP R[RBX]
+POP R[RAX]
+MOV U[RBX], U[ES]
+PUSH R[RCX]
+
+# pwrite
+# Get full size into RCX
+ADD R[RBX], MEM[U[RAX] : [0x4]], R[RCX]
+# Write data
+MOV PROC[MEM[U[RBX] : [0x4]], [0x0] : R[RCX]], HEAP[R[RAX], [0x0] : R[RCX]]
+
+# presume
+# Prepare registers
+MOV R[RBX], MEM[U[RBX] : [0x4]]
+MOV R[RAX], [22]
+# Call system
+SYS
+EIR
+
+# Return
+POPR
+POPR
+MOV R[RAX], [0]
+RET
