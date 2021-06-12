@@ -1974,7 +1974,7 @@ class CPUCore:
 			mem_len_arg = self.handle_output(self.parse_argument())
 			mem_len = self.handle_output(self.get(mem_len_arg))
 
-			return (0, ('mem', (mem_start, mem_len)))
+			return (0, ('pmem', (mem_pid, mem_start, mem_len)))
 		else:
 			return (14, "Not a supported data type.")
 
