@@ -516,6 +516,34 @@ class Compiler:
 			if self.next_char() != ']':
 				raise ParseError('Missing \']\'')
 			return ['U', arg]
+		# Check if the type is a 'PROC' or process memory type
+		elif type_data == 'PROC':
+			# Parse a process memory type i.e. PROC[[0], [0x0] : [0x4]]
+			# Get opening bracket
+			if self.next_char() != '[':
+				raise ParseError('Missing \'[\'')
+			# Get the process ID
+			self.parse_through_whitespace_nonewline()
+			arg.append(self.parse_arg())
+			# Get ','
+			self.parse_through_whitespace_nonewline()
+			if self.next_char() != ',':
+				raise ParseError('Missing \',\'')
+			# Parse through to get the starting position
+			self.parse_through_whitespace_nonewline()
+			arg.append(self.parse_arg())
+			# Get ':'
+			self.parse_through_whitespace_nonewline()
+			if self.next_char() != ':':
+				raise ParseError('Missing \':\'')
+			# Get ending position
+			self.parse_through_whitespace_nonewline()
+			arg.append(self.parse_arg())
+			# Get ending bracket
+			self.parse_through_whitespace_nonewline()
+			if self.next_char() != ']':
+				raise ParseError('Missing \']\'')
+			return ['PROC', arg]
 		else:
 			raise ParseError('Undefined type.')
 
@@ -716,6 +744,13 @@ class Compiler:
 			# Type: 6, RegName: data[0]
 			self.compiled += bytearray([6])
 			self.compiled += bytearray([data[0]])
+		# Other process memory
+		elif atype == 'PROC':
+			# Type: 7, PID: data[0], Start: data[1], End: data[2]
+			self.compiled += bytearray([7])
+			self.compile_arg(data[0]) 
+			self.compile_arg(data[1])
+			self.compile_arg(data[2])
 
 	def compile_data(self, data):
 

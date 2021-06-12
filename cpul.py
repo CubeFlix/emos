@@ -1961,6 +1961,20 @@ class CPUCore:
 			self.inc_rip(1)
 
 			return (0, ('reg', (reg_suf, b'\x04', b'\x04')))
+		elif arg_type == 7:  # Process memory
+			# Get PID
+			mem_pid_arg = self.handle_output(self.parse_argument())
+			mem_pid = self.handle_output(self.get(mem_start_arg))
+
+			# Get offset
+			mem_start_arg = self.handle_output(self.parse_argument())
+			mem_start = self.handle_output(self.get(mem_start_arg))
+
+			# Get length
+			mem_len_arg = self.handle_output(self.parse_argument())
+			mem_len = self.handle_output(self.get(mem_len_arg))
+
+			return (0, ('mem', (mem_start, mem_len)))
 		else:
 			return (14, "Not a supported data type.")
 
