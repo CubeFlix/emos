@@ -1240,7 +1240,7 @@ class Compiler:
 # PUSH [4]
 # POPNR [0x0]'''
 
-code = '''<"fibonacci.cpu">'''
+code = '''<"printer.cpu">'''
 
 # code = '''<WRITELIB>
 # LIB [0x0], [0x0]
@@ -1285,6 +1285,9 @@ print(a.data_index)
 o = open('code.c', 'wb')
 o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
 o.close()
+o2 = open('data.c', 'wb')
+o2.write(a.compiled[a.data_index : ] if a.data_index else b'')
+o2.close()
 print(len(a.compiled))
 # print(a.code)
 # print(a.tree)

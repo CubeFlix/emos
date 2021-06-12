@@ -2155,7 +2155,7 @@ class CPUCore:
 
 class ALU:
 
-	"""The ALU for a CPU."""
+	"""The arithmetic logic unit for a CPU."""
 
 	def __init__(self):
 
@@ -4322,10 +4322,13 @@ code2 = bytearray(b'\x01\x05\x00\x02\x01\x00\x01\x05\x00\x18\x05\x00\x02\x01\x00
 f = open('code.c', 'rb')
 code = f.read()
 f.close()
+f2 = open('data.c', 'rb')
+codedata = f2.read()
+f2.close()
 print('CREATING PROCESS MEMORY')
 # processmemory = ProcessMemory(code, b'd\x00\x00\x00<\x00\x00\x00', b'')
 # processmemory = ProcessMemory(code, b'Hello!', b'')
-processmemory = ProcessMemory(code, b'\x01\x00\x00\x00Fizzbuzz\nFizz\nBuzz\n', b'')
+processmemory = ProcessMemory(code, codedata, b'')
 processmemory2 = ProcessMemory(code2, b'\x00\x00\x00\x00', b'')
 print(processmemory)
 print()
