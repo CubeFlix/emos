@@ -1,0 +1,102 @@
+# Asks for two numbers, a, and b. Then, it adds them and puts the result onto the screen.
+
+<ISLIB>
+
+JMP SYM[main]
+
+[printf]
+MOV R[RAX], [1]
+ARGN R[RBX], [0x1]
+ARGN R[RCX], [0x0]
+SYS
+EIR
+RET
+
+[main]
+
+# int main() 
+# {
+# 	printf("Number 1: ");
+# 	int a = stoi(input());
+# 	printf("\n");
+# 	printf("Number 2: ");
+# 	int b = stoi(input());
+# 	printf("\n");
+# 	int c = a + b;
+# 	printf(itos(c));
+# }
+
+# -- Ask for number A --
+# Print the prompt
+MOV R[RAX], U[ES]
+MOV MEM[U[ES] : [1d10]], ["Number 1: "]
+PUSH R[RAX]
+PUSH [10]
+CALL SYM[printf]
+POPNR [1d18]
+# Ask for the number
+# Take input
+MOV R[RAX], [3]
+SYS
+EIR
+# Turn the input into an integer
+SUB U[ES], R[RBX], R[R9]
+MOV R[R10], R[RBX]
+LIB [0x0], [0x1]
+EIR
+# Remove the string
+POPNR R[R10]
+# Place the number into stack
+MOV U[RAX], U[ES]
+MOV MEM[U[ES] : [0x4]], R[RBX]
+# Print a newline
+MOV R[RAX], U[ES]
+MOV MEM[U[ES] : [0x1]], ["\n"]
+PUSH R[RAX]
+PUSH [1]
+CALL SYM[printf]
+POPNR [1d9]
+
+# -- Ask for number B --
+# Print the prompt
+MOV R[RAX], U[ES]
+MOV MEM[U[ES] : [1d10]], ["Number 2: "]
+PUSH R[RAX]
+PUSH [10]
+CALL SYM[printf]
+POPNR [1d18]
+# Ask for the number
+# Take input
+MOV R[RAX], [3]
+SYS
+EIR
+# Turn the input into an integer
+SUB U[ES], R[RBX], R[R9]
+MOV R[R10], R[RBX]
+LIB [0x0], [0x1]
+EIR
+# Remove the string
+POPNR R[R10]
+# Place the number into stack
+MOV U[RBX], U[ES]
+MOV MEM[U[ES] : [0x4]], R[RBX]
+# Print a newline
+MOV R[RAX], U[ES]
+MOV MEM[U[ES] : [0x1]], ["\n"]
+PUSH R[RAX]
+PUSH [1]
+CALL SYM[printf]
+POPNR [1d9]
+
+# -- Add A and B, then print them --
+# Add A and B
+MOV U[RCX], U[ES]
+ADD MEM[U[RAX] : [0x4]], MEM[U[RBX] : [0x4]], MEM[U[ES] : [0x4]]
+# Convert C to a string
+MOV R[R9], MEM[U[RCX] : [0x4]]
+LIB [0x0], [0x0]
+EIR
+# Print the string
+SUB U[ES], R[RBX], MEM[U[ES] : [0x4]]
+PUSH R[RBX]
+CALL SYM[printf]

@@ -3236,6 +3236,8 @@ class OperatingSystem:
 				s_time = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
 				time.sleep(s_time)
 				exitcode = (0, None)
+			else:
+				exitcode = (30, "Invalid SYSCall.")
 
 			# Update memory in process
 			self.update_process_memory_global(pid, tid)
@@ -4155,7 +4157,7 @@ class STDErr:
 
 class INT_STR_LIB(DynamicLibrary):
 
-	defined_calls = [0]
+	defined_calls = [0, 1, 2, 3]
 
 	"""Integer and string conversion library."""
 
