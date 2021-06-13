@@ -1986,6 +1986,8 @@ class CPUCore:
 			# Get opcode
 			opcode = int.from_bytes(self.handle_output(self.get_current_code_bytes(1)), byteorder='little')
 			self.inc_rip(1)
+			if not opcode in self.opcode_dict:
+				self.handle_output((29, "Invalid opcode."))
 			func, n_args, d_args = self.opcode_dict[opcode]
 			# Get args
 			args = []
@@ -2020,6 +2022,8 @@ class CPUCore:
 			# Get opcode
 			opcode = int.from_bytes(self.handle_output(self.get_current_code_bytes(1)), byteorder='little')
 			self.inc_rip(1)
+			if not opcode in self.opcode_dict:
+				self.handle_output((29, "Invalid opcode."))
 			func, n_args, d_args = self.opcode_dict[opcode]
 			# Get args
 			args = []
