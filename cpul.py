@@ -6,6 +6,7 @@ Written by Kevin Chen."""
 import time
 import threading
 import copy
+import pickle
 import os, sys
 
 
@@ -13,6 +14,7 @@ import os, sys
 MAXPROCESSMEMORY = 2 ** 32 - 1
 MAXMEMORY = 2 ** 32 - 1
 ENCODING = 'utf-8'
+INVALID_FILENAME_CHARS = ['\n', '\b', '\t', '\r']
 
 
 class Exit(Exception):
@@ -2512,7 +2514,7 @@ class CPU:
 		return self.__repr__()
 
 
-class HardDrive:
+class FileSystem:
 
 	"""A hard drive managed by the OS."""
 
@@ -2526,9 +2528,248 @@ class HardDrive:
 		self.outfile = outfile
 		self.filesystem = {}
 
-	def get_full_buffer():
+	def read_file(self, path):
 
-		pass
+		"""Read a file from the file system.
+		   Args: path -> the path to the file"""
+
+		# Split the path
+		split_path = os.path.normpath(path).split(os.path.sep)
+		# Find the file by iterating through the path into the file system
+		traversal_history = [self.filesystem]
+		for item in split_path:
+			if item in ('', '.'):
+				continue
+			elif item == '..':
+				if len(traversal_history) == 1:
+					return (31, "Cannot traverse back from root directory.")
+				# Move back
+				del traversal_history[-1]
+			# Traverse to the next section
+			try:
+				traversal_history.append(traversal_history[-1][item])
+			except (KeyError, TypeError):
+				return (32, "Path is invalid.")
+		# Get the final file
+		if not type(traversal_history[-1]) in (bytes, bytearray):
+			return (32, "Path is invalid.")
+		return (0, traversal_history[-1])
+
+	def write_file(self, path, data):
+
+		"""Write to a new or existing file on the file system.
+		   Args: path -> the path to the file
+		         data -> the data to write to the file"""
+
+		# Split the path
+		split_path = os.path.normpath(path).split(os.path.sep)
+		final_name = split_path.pop()
+		if any([char in final_name for char in INVALID_FILENAME_CHARS]):
+			return (34, "Invalid filename.")
+		# Find the file by iterating through the path into the file system
+		traversal_history = [self.filesystem]
+		for item in split_path:
+			if item in ('', '.'):
+				continue
+			elif item == '..':
+				if len(traversal_history) == 1:
+					return (31, "Cannot traverse back from root directory.")
+				# Move back
+				del traversal_history[-1]
+			# Traverse to the next section
+			try:
+				traversal_history.append(traversal_history[-1][item])
+			except (KeyError, TypeError):
+				return (32, "Path is invalid.")
+		# Check for a folder
+		if final_name in traversal_history[-1] and type(traversal_history[-1][final_name]) == dict:
+			return (32, "Path is invalid.")
+		# Write to the final file
+		traversal_history[-1][final_name] = data
+		# Update
+		self._backend_update()
+		return (0, None)
+
+	def delete_file(self, path):
+
+		"""Delete a file from the file system.
+		   Args: path -> the path to the file"""
+
+		# Split the path
+		split_path = os.path.normpath(path).split(os.path.sep)
+		# Find the file by iterating through the path into the file system
+		traversal_history = [self.filesystem]
+		for item in split_path:
+			if item in ('', '.'):
+				continue
+			elif item == '..':
+				if len(traversal_history) == 1:
+					return (31, "Cannot traverse back from root directory.")
+				# Move back
+				del traversal_history[-1]
+			# Traverse to the next section
+			try:
+				traversal_history.append(traversal_history[-1][item])
+			except (KeyError, TypeError):
+				return (32, "Path is invalid.")
+		# Check the final file
+		if not type(traversal_history[-1]) in (bytes, bytearray):
+			return (32, "Path is invalid.")
+		# Delete the file using the second to last reference in the traversal history
+		del traversal_history[-2][split_path[-1]]
+		# Update
+		self._backend_update()
+		return (0, None)
+
+	def rename_file(self, path, new_name):
+
+		"""Rename a file within the file system.
+		   Args: path -> the path to the file
+		         new_name -> new file name"""
+
+		if any([char in new_name for char in INVALID_FILENAME_CHARS]):
+			return (34, "Invalid filename.")
+		# Split the path
+		split_path = os.path.normpath(path).split(os.path.sep)
+		# Find the file by iterating through the path into the file system
+		traversal_history = [self.filesystem]
+		for item in split_path:
+			if item in ('', '.'):
+				continue
+			elif item == '..':
+				if len(traversal_history) == 1:
+					return (31, "Cannot traverse back from root directory.")
+				# Move back
+				del traversal_history[-1]
+			# Traverse to the next section
+			try:
+				traversal_history.append(traversal_history[-1][item])
+			except (KeyError, TypeError):
+				return (32, "Path is invalid.")
+		# Check the final file
+		if not type(traversal_history[-1]) in (bytes, bytearray):
+			return (32, "Path is invalid.")
+		# Rename the file using the second to last reference in the traversal history
+		traversal_history[-2][new_name] = traversal_history[-2].pop(split_path[-1])
+		# Update
+		self._backend_update()
+		return (0, None)
+
+	def create_directory(self, path):
+
+		"""Create a directory in the file system.
+		   Args: path -> the path to the folder"""
+
+		# Split the path
+		split_path = os.path.normpath(path).split(os.path.sep)
+		final_name = split_path.pop()
+		if any([char in final_name for char in INVALID_FILENAME_CHARS]):
+			return (34, "Invalid directory name.")
+		# Find the folder by iterating through the path into the file system
+		traversal_history = [self.filesystem]
+		for item in split_path:
+			if item in ('', '.'):
+				continue
+			elif item == '..':
+				if len(traversal_history) == 1:
+					return (31, "Cannot traverse back from root directory.")
+				# Move back
+				del traversal_history[-1]
+			# Traverse to the next section
+			try:
+				traversal_history.append(traversal_history[-1][item])
+			except (KeyError, TypeError):
+				return (32, "Path is invalid.")
+		# Check for an existing folder
+		if final_name in traversal_history[-1] and type(traversal_history[-1][final_name]) == dict:
+			return (33, "Folder already exists.")
+		# Check for an existing file
+		if final_name in traversal_history[-1] and type(traversal_history[-1][final_name]) in (bytes, bytearray):
+			return (32, "Path is invalid.")
+		# Create the directory
+		traversal_history[-1][final_name] = {}
+		# Update
+		self._backend_update()
+		return (0, None)
+
+	def delete_directory(self, path):
+
+		"""Delete a directory from the file system.
+		   Args: path -> the path to the folder"""
+
+		# Split the path
+		split_path = os.path.normpath(path).split(os.path.sep)
+		# Find the folder by iterating through the path into the file system
+		traversal_history = [self.filesystem]
+		for item in split_path:
+			if item in ('', '.'):
+				continue
+			elif item == '..':
+				if len(traversal_history) == 1:
+					return (31, "Cannot traverse back from root directory.")
+				# Move back
+				del traversal_history[-1]
+			# Traverse to the next section
+			try:
+				traversal_history.append(traversal_history[-1][item])
+			except (KeyError, TypeError):
+				return (32, "Path is invalid.")
+		# Check the final directory
+		if not type(traversal_history[-1]) == dict:
+			return (32, "Path is invalid.")
+		# Delete the folder using the second to last reference in the traversal history
+		del traversal_history[-2][split_path[-1]]
+		# Update
+		self._backend_update()
+		return (0, None)
+
+	def list_directory(self, path):
+
+		"""List a directory path, seperated by newlines.
+		   Args: path -> the path to the directory"""
+
+		# Split the path
+		split_path = os.path.normpath(path).split(os.path.sep)
+		# Find the folder by iterating through the path into the file system
+		traversal_history = [self.filesystem]
+		for item in split_path:
+			if item in ('', '.'):
+				continue
+			elif item == '..':
+				if len(traversal_history) == 1:
+					return (31, "Cannot traverse back from root directory.")
+				# Move back
+				del traversal_history[-1]
+			# Traverse to the next section
+			try:
+				traversal_history.append(traversal_history[-1][item])
+			except (KeyError, TypeError):
+				return (32, "Path is invalid.")
+		# Check the final directory
+		if not type(traversal_history[-1]) == dict:
+			return (32, "Path is invalid.")
+		# List the folder
+		data = '\n'.join(traversal_history[-1])
+		# Update
+		self._backend_update()
+		return (0, data)
+
+	def get_full_buffer(self):
+
+		"""Get the full file system buffer."""
+
+		return pickle.dumps(self.filesystem)
+
+	def _backend_load(self):
+
+		"""Load the file system from the output file."""
+
+		try:
+			f = open(self.outfile, 'rb')
+		except Exception as e:
+			raise SysError("Output file for FileSystem does not exist.")
+		self.filesystem = pickle.loads(f.read())
+		f.close()
 
 	def _backend_update(self):
 
@@ -2537,6 +2778,13 @@ class HardDrive:
 		f = open(self.outfile, 'wb')
 		f.write(self.get_full_buffer())
 		f.close()
+
+	def _format(self):
+
+		"""Format the hard drive."""
+
+		self.filesystem = {}
+		self._backend_update()
 
 
 class Computer:
@@ -3480,11 +3728,14 @@ class OperatingSystem:
 
 		return self.__repr__()
 
+
 class Screen:
 	pass
 
+
 class Compiler:
 	pass
+
 
 class Peripheral:
 	
@@ -3595,8 +3846,10 @@ class FPU:
 
 	pass
 
+
 class GPU:
 	pass
+
 
 class Process:
 

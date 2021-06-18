@@ -1,0 +1,20 @@
+<ISLIB>
+
+JMP SYM[main]
+
+<"power.cpu">
+
+[main]
+PUSH [5]
+PUSH [3]
+CALL SYM[power]
+
+MOV R[R9], R[RAX]
+LIB [0x0], [0x0]
+EIR
+
+MOV R[RAX], [1]
+MOV R[RCX], R[RBX]
+SUB U[ES], R[RBX], R[RBX]
+SYS
+EIR

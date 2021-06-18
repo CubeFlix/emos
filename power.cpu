@@ -1,0 +1,72 @@
+# POWER.cpu
+# Function to take one number to the power of another number, or a^b.
+# 
+# Pseudocode:
+# int power(int a, int b)
+# {
+# 	if (b == 0)
+# 	{
+# 		return 1;
+# 	}
+# 
+# 	int answer = a;
+# 	int i = 1;
+# 	while (i < b)
+# 	{
+# 		answer = answer * a;
+# 		i = i + 1;
+# 	}
+# 	return answer;
+# }
+
+[power]
+# Get a
+ARGN R[RAX], [0x1]
+# Get b
+ARGN R[RBX], [0x0]
+
+# Check if b is 0
+CMP R[RBX], [0x0]
+JE SYM[power-zerocmp]
+JNE SYM[power-notzerocmp]
+
+# Value of b is zero
+[power-zerocmp]
+MOV R[RAX], [1]
+RET
+
+# Value of b is not zero, continue power
+[power-notzerocmp]
+# Define answer
+MOV U[RAX], U[ES]
+MOV MEM[U[ES] : [0x4]], R[RAX]
+# Define i
+MOV U[RBX], U[ES]
+MOV MEM[U[ES] : [0x4]], [1]
+
+# Power loop
+[power-loop]
+# Compare the value of i and b
+CMP MEM[U[RBX] : [0x4]], R[RBX]
+JL SYM[power-continueloop]
+JGE SYM[power-return]
+
+# Power continue loop
+[power-continueloop]
+# Multiply answer by a
+MUL MEM[U[RAX] : [0x4]], R[RAX], MEM[U[RAX] : [0x4]]
+# Increment i
+ADD MEM[U[RBX] : [0x4]], [0x1], MEM[U[RBX] : [0x4]]
+# Continue power loop
+JMP SYM[power-loop]
+
+# Power return
+[power-return]
+# Return answer
+# Move answer into RAX
+MOV R[RAX], MEM[U[RAX] : [0x4]]
+# Remove answer and i
+POPR
+POPR
+# Return
+RET
