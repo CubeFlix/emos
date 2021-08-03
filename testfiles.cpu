@@ -1,0 +1,54 @@
+[main]
+
+# Create the folder
+
+# Folder name
+MOV R[RBX], U[ES]
+PUSHN ["folder"]
+MOV R[RCX], [6]
+
+MOV R[RAX], [31]
+SYS
+EIR
+
+# Change the directory
+MOV R[RBX], U[ES]
+PUSHN ["folder/../folder"]
+MOV R[RCX], [16]
+
+MOV R[RAX], [26]
+SYS
+EIR
+
+# Write to the file
+
+# File name
+MOV R[RBX], U[ES]
+PUSHN ["test.txt"]
+MOV R[RCX], [8]
+
+# File data
+MOV R[R9], U[ES]
+PUSHN ["test data!"]
+MOV R[R10], [10]
+
+MOV R[RAX], [28]
+SYS
+EIR
+
+# Read file
+
+# File name is already in place
+
+MOV R[RAX], [27]
+SYS
+EIR
+
+# Print the file's contents
+
+MOV R[RAX], [1]
+MOV R[RCX], R[RBX]
+SUB U[ES], R[RBX], R[RBX]
+SYS
+EIR
+

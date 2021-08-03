@@ -7,6 +7,7 @@ import time
 import threading
 import copy
 import pickle
+import shlex
 import os, sys
 
 
@@ -2819,6 +2820,13 @@ class Computer:
 
 		self.operatingsystem = os
 
+	def set_filesystem(self, filesystem):
+
+		"""Set the file system/hard drive for the computer.
+		   Args: filesystem -> the file system to set"""
+
+		self.filesystem = filesystem
+
 	def start(self):
 
 		"""Start up the computer."""
@@ -2914,6 +2922,8 @@ class OperatingSystem:
 
 		# System libraries (TODO)
 		self.syslibs = [INT_STR_LIB, WRITELIB]
+
+		self.log = ''
 
 	def set_max_thread_operations(self, max_operations_per_thread):
 
@@ -3028,6 +3038,7 @@ class OperatingSystem:
 		# Update the process
 		self.processes[current_pid].state = 'r'
 		self.processes[current_pid].pid = current_pid
+		self.processes[current_pid].initialize(self.computer)
 
 		return (0, current_pid)
 
@@ -3484,6 +3495,206 @@ class OperatingSystem:
 				s_time = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
 				time.sleep(s_time)
 				exitcode = (0, None)
+			elif syscallid == 26:
+				# Change the current working directory (in the ProcessCMDHandler) with the string defined in RBX and RCX
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+				exitcode = (exitcode, None)
+				if exitcode[0] != 0:
+					pass
+				else:
+					# Change the CWD
+					path = str(data, ENCODING)
+					if not (path.startswith('/') or path.startswith('\\')):
+						current = os.path.normpath(self.processes[pid].cmdhandler.current_working_dir).split(os.path.sep)
+						for section in os.path.normpath(path).split(os.path.sep):
+							if section in ('', '.'):
+								continue
+							elif section == '..':
+								if len(current) != 0:
+									current.pop()
+								else:
+									exitcode = (31, "Cannot traverse back from root directory.")
+									break
+							else:
+								current.append(section)
+						if exitcode[0] == 0:
+							self.processes[pid].cmdhandler.current_working_dir = '/'.join(current)
+					else:
+						self.processes[pid].cmdhandler.current_working_dir = path
+			elif syscallid == 27:
+				# Read a file given by RBX and RCX, and place it along with it's length into the stack and RBX, respectively
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					# Read the file
+					path = str(data, ENCODING)
+					if path.startswith('/') or path.startswith('\\'):
+						# Absolute path
+						fullpath = path
+					else:
+						# Relative path
+						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+					exitcode = self.computer.filesystem.read_file(fullpath)
+					if exitcode[0] == 0:
+						# Write the data in the stack
+						self.processes[pid].threads[tid].stack.push(exitcode[1])
+						# Modify the processes registers
+						self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
+						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(exitcode[1]), 4, byteorder="little")
+			elif syscallid == 28:
+				# Write to a file from the process memory given by R9 and R10, with the filename given by RBX and RCX
+				begin_offset_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				begin_offset_data = int.from_bytes(self.processes[pid].threads[tid].registers['R9'].get_bytes(0, 4)[1], byteorder='little')
+				length_data = int.from_bytes(self.processes[pid].threads[tid].registers['R10'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, data = processmemory_use.get_bytes(begin_offset_data, length_data)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					exitcode, filename = processmemory_use.get_bytes(begin_offset_filename, length_filename)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
+					else:
+						# Write to the file
+						path = str(filename, ENCODING)
+						if path.startswith('/') or path.startswith('\\'):
+							# Absolute path
+							fullpath = path
+						else:
+							# Relative path
+							fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+						exitcode = self.computer.filesystem.write_file(fullpath, data)
+			elif syscallid == 29:
+				# Delete a file with the path given by RBX and RCX
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					# Delete the file
+					path = str(data, ENCODING)
+					if path.startswith('/') or path.startswith('\\'):
+						# Absolute path
+						fullpath = path
+					else:
+						# Relative path
+						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+					exitcode = self.computer.filesystem.delete_file(fullpath)
+			elif syscallid == 30:
+				# Rename a file with the path given by RBX and RCX, with the new name given by R9 and R10
+				begin_offset_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				begin_offset_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, filename = processmemory_use.get_bytes(begin_offset_filename, length_filename)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					exitcode, newname = processmemory_use.get_bytes(begin_offset_newname, length_newname)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
+					else:
+						# Rename the file
+						path = str(filename, ENCODING)
+						if path.startswith('/') or path.startswith('\\'):
+							# Absolute path
+							fullpath = path
+						else:
+							# Relative path
+							fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+						exitcode = self.computer.filesystem.rename_file(fullpath, str(newname, ENCODING))
+			elif syscallid == 31:
+				# Create a folder with the path given by RBX and RCX
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, foldername = processmemory_use.get_bytes(begin_offset, length)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					# Create the folder
+					path = str(foldername, ENCODING)
+					if path.startswith('/') or path.startswith('\\'):
+						# Absolute path
+						fullpath = path
+					else:
+						# Relative path
+						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+					exitcode = self.computer.filesystem.create_directory(fullpath)
+			elif syscallid == 32:
+				# Delete a folder with the path given by RBX and RCX
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, foldername = processmemory_use.get_bytes(begin_offset, length)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					# Delete the folder
+					path = str(foldername, ENCODING)
+					if path.startswith('/') or path.startswith('\\'):
+						# Absolute path
+						fullpath = path
+					else:
+						# Relative path
+						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+					exitcode = self.computer.filesystem.delete_directory(fullpath)
+			elif syscallid == 33:
+				# Return a list of the filenames in the directory given by RBX and RCX, separated by newlines and put it into the stack along with the length in RBX
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					# Read the folder
+					path = str(data, ENCODING)
+					if path.startswith('/') or path.startswith('\\'):
+						# Absolute path
+						fullpath = path
+					else:
+						# Relative path
+						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+					exitcode = self.computer.filesystem.list_directory(fullpath)
+					if exitcode[0] == 0:
+						# Write the data in the stack
+						self.processes[pid].threads[tid].stack.push(exitcode[1])
+						# Modify the processes registers
+						self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
+						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(exitcode[1]), 4, byteorder="little")
+			elif syscallid == 34:
+				# Run a command defined by RBX and RCX on the command line
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					# Run the command
+					command = str(data, ENCODING)
+					exitcode = self.processes[pid].cmdhandler.handle(command)
 			else:
 				exitcode = (30, "Invalid SYSCall.")
 
@@ -3498,6 +3709,8 @@ class OperatingSystem:
 			traceback.print_exc() # Temp
 			# Handle exitcode
 			self.halt_thread(pid, tid, 255)
+			# Add to log
+			self.log += '\n' + str(e)
 
 	def interrupt(self, iid, pid, tid):
 
@@ -3850,6 +4063,31 @@ class FPU:
 class GPU:
 	pass
 
+class ProcessCMDHandler:
+
+	"""The main process command handler."""
+
+	def __init__(self, current_working_dir):
+
+		"""Create the command handler.
+		   Args: current_working_dir -> the current working directory for the command handler"""
+
+		self.current_working_dir = current_working_dir
+
+	def initialize(self, computer):
+
+		"""Initialize the command handler.
+		   Args: computer -> the computer to use"""
+
+		self.computer = computer
+
+	def handle(self, command):
+
+		"""Handle a command.
+		   Args: command -> command to handle"""
+
+		...
+
 
 class Process:
 
@@ -3859,7 +4097,7 @@ class Process:
 
 		"""Create the process.
 		   Args: processmemory -> the process memory for the process
-		         threads -> a dictonary containing all the thread ids and the threads
+		         threads -> a dictionary containing all the thread ids and the threads
 		         state -> string containing the state of the process. 'r' for running, or 't' for terminated/stopped/error"""
 
 		self.processmemory = processmemory
@@ -3868,6 +4106,10 @@ class Process:
 
 		self.stdout = STDOut()
 		self.stdin = STDIn()
+
+		self.open_files = []
+
+		self.cmdhandler = ProcessCMDHandler('')
 
 	def get_processmemory_thread(self, tid):
 
@@ -4599,6 +4841,9 @@ computer = Computer()
 computer.set_memory(memory)
 operatingsystem = OperatingSystem(computer)
 terminalscreen = TerminalScreen(computer)
+harddrive = FileSystem(computer, "test.fs")
+harddrive._format()
+computer.set_filesystem(harddrive)
 computer.add_peripheral(terminalscreen)
 computer.set_os(operatingsystem)
 print()
@@ -4661,3 +4906,4 @@ print(computer.operatingsystem.processes[1].output)
 # print(computer.memory.memorypartitions[('mem', 0)].data)
 # print(computer.memory.memorypartitions[('mem', 1)].data)
 computer.operatingsystem.stop_os()
+print(computer.operatingsystem.log)
