@@ -1,0 +1,21 @@
+# Command test
+MOV R[RBX], U[ES]
+PUSHN ["file"]
+MOV R[RCX], [4]
+MOV R[RAX], [34]
+SYS
+EIR
+
+MOV R[RBX], U[ES]
+PUSHN ["cd folder"]
+MOV R[RCX], [9]
+MOV R[RAX], [34]
+SYS
+EIR
+
+MOV R[RBX], U[ES]
+PUSHN ["cd > cddata"]
+MOV R[RCX], [11]
+MOV R[RAX], [34]
+SYS
+EIR

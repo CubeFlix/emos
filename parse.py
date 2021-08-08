@@ -1240,7 +1240,7 @@ class Compiler:
 # PUSH [4]
 # POPNR [0x0]'''
 
-code = '''<"testfiles.cpu">'''
+code = '''<"commandtest.cpu">'''
 
 # code = '''<WRITELIB>
 # LIB [0x0], [0x0]

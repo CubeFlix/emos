@@ -3200,12 +3200,11 @@ class OperatingSystem:
 
 	def run_executable_data(self, data):
 
-		"""Run executable data and load it, retuning the PID.
+		"""Run executable data and load it, retuning the process.
 		   Args: data -> data to run"""
 
 		# Get the beginning data offset
 		data_offset = int.from_bytes(data[0 : 4], byteorder='little')
-
 		# Split the data
 		data = data[4 : ]
 		# Get the code section
@@ -3221,7 +3220,7 @@ class OperatingSystem:
 
 		# Create process
 		process = Process(processmemory, {0 : thread}, 't')
-		return self.process_create(process)
+		return process
 
 	def update_process_memory_global(self, pid, tid):
 
@@ -3695,6 +3694,20 @@ class OperatingSystem:
 					# Run the command
 					command = str(data, ENCODING)
 					exitcode = self.processes[pid].cmdhandler.handle(command)
+					if exitcode[0] == 0:
+						exitcode = (0, None)
+			elif syscallid == 35:
+				# Get the current working directory and put it into stack with the length in RBX
+				data = self.processes[pid].cmdhandler.current_working_dir
+				# Write the data in the stack
+				self.processes[pid].threads[tid].stack.push(bytes(data, ENCODING))
+				# Modify the processes registers
+				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(data), 4, byteorder='little')
+				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
+				exitcode = (0, None)
+			elif syscallid == 36:
+				# Format the FileSystem
+				self.computer.filesystem._format()
 			else:
 				exitcode = (30, "Invalid SYSCall.")
 
@@ -4086,7 +4099,140 @@ class ProcessCMDHandler:
 		"""Handle a command.
 		   Args: command -> command to handle"""
 
-		...
+		try:
+			# Split the command
+			split_command = shlex.split(command)
+
+			# Fully split the command
+			maincommand, args, pipetofile, argsfile, pipecommand = self.fully_split(split_command)
+
+			# Get full arguments from files
+			# ORDER:
+			# Arguments
+			# Pipe file
+			# Pipe command
+			if argsfile:
+				for file in argsfile:
+					# Read each file
+					exitcode, filedata = self.computer.filesystem.read_file(os.path.join(self.current_working_dir, file) if (file.startswith('/') or file.startswith('\\')) else file)
+					if exitcode != 0:
+						return (35, "Error handling command. [" + str(e) + "]")
+					# Get the arguments
+					args += shlex.split(str(filedata, ENCODING))
+
+			# Add pipe command data
+			if pipecommand:
+				# Run the pipe command
+				exitcode, output = self.handle(' '.join(pipecommand))
+				if exitcode != 0:
+					return (35, "Error handling command. [" + str(e) + "]")
+				# Output should be a copy of the now terminated process
+				stdout_data = output.stdout.data
+				args += shlex.split(str(stdout_data, ENCODING))
+
+			# Run the final command
+			# Check if the command is a file
+			# FUTURE TODO: Environment Variables
+			directory_list = self.computer.filesystem.list_directory(self.current_working_dir)
+			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list):
+				# Command is a file
+				# Get full main command name
+				maincommand = maincommand if maincommand.endswith('.cbf') else (maincommand + '.cbf')
+				# Create the process
+				file_data = self.computer.filesystem.read_file(os.path.join(self.current_working_dir, maincommand))
+				if file_data[0] != 0:
+					return file_data
+				process = self.computer.operatingsystem.run_executable_data(file_data[1])
+				process.stdin.data = ' '.join(args)
+				exitcode, pid = self.computer.operatingsystem.process_create(process)
+				if exitcode != 0:
+					return (exitcode, pid)
+				# Wait for the process to finish
+				self.computer.operatingsystem.process_await(pid)
+				# Get the processes STDOut data
+				stdout_data = self.computer.operatingsystem.processes[pid].stdout.data
+				# Get the processes exitcode
+				exitcode = self.computer.operatingsystem.processes[pid].output[0]
+
+				# Write the STDOut data to the pipe file
+				if pipetofile:
+					self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], stdout_data)
+
+				# Terminate the process
+				self.computer.operatingsystem.process_delete(pid)
+
+				# Return with the exitcode and STDOut data
+				return (exitcode, stdout_data)
+
+			# Else, try to run a built-in command
+			if maincommand == 'cd':
+				# Change current working directory
+				if args:
+					# Change the CWD
+					# Get string new path
+					path = ' '.join(args)
+					if not (path.startswith('/') or path.startswith('\\')):
+						current = os.path.normpath(self.current_working_dir).split(os.path.sep)
+						for section in os.path.normpath(path).split(os.path.sep):
+							if section in ('', '.'):
+								continue
+							elif section == '..':
+								if len(current) != 0:
+									current.pop()
+								else:
+									return (31, "Cannot traverse back from root directory.")
+							else:
+								current.append(section)
+						self.current_working_dir = '/'.join(current)
+					else:
+						self.current_working_dir = path
+					return (0, b'')
+				else:
+					# Get current working directory
+					# Write the STDOut data to the pipe file
+					if pipetofile:
+						return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(self.current_working_dir, ENCODING))[0], bytes(self.current_working_dir, ENCODING))
+					return (0, bytes(self.current_working_dir, ENCODING))
+			elif maincommand == 'ldir':
+				# List the current directory, separated by newlines
+				pass
+
+			return (36, "Illegal command.")
+
+		except Exception as e:
+			# Error
+			self.computer.operatingsystem.log += (str(e) + '\n')
+
+			return (35, "Error handling command. [" + str(e) + "]")
+
+	def fully_split(self, split_command):
+
+		"""Fully split a command into the main command, arguments, pipe file, argument file, and pipe command.
+		   Args: split_command -> the already split command (using shlex)"""
+
+		# Find different sections of the command
+		fully_split_command = [[], [], [], []]
+		current_state = ''
+		for section in split_command:
+			if section in ('>', '<', '|'):
+				current_state = section
+				continue
+
+			if current_state == '':
+				fully_split_command[0].append(section)
+			elif current_state == '>':
+				fully_split_command[1].append(section)
+			elif current_state == '<':
+				fully_split_command[2].append(section)
+			elif current_state == '|':
+				fully_split_command[3].append(section)
+
+		maincommand, args = fully_split_command[0][0], fully_split_command[0][1 : ]
+		pipetofile = fully_split_command[1]
+		argsfile = fully_split_command[2]
+		pipecommand = fully_split_command[3]
+
+		return maincommand, args, pipetofile, argsfile, pipecommand
 
 
 class Process:
@@ -4152,6 +4298,14 @@ class Process:
 		   Args: processmemory -> the processes memory."""
 
 		self.processmemory = processmemory
+
+	def initialize(self, computer):
+
+		"""Initialize the process.
+		   Args: computer -> the computer to initialize with"""
+
+		self.computer = computer
+		self.cmdhandler.initialize(self.computer)
 
 	def __repr__(self):
 
@@ -4843,6 +4997,8 @@ operatingsystem = OperatingSystem(computer)
 terminalscreen = TerminalScreen(computer)
 harddrive = FileSystem(computer, "test.fs")
 harddrive._format()
+harddrive.filesystem = {'file.cbf' : bytearray(b'\xbc\x00\x00\x00\x00\x05\x03\x06\x0c&\x02\x06\x00folder\x00\x05\x01\x02\x04\x00\x06\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1f\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x10\x00folder/../folder\x00\x05\x01\x02\x04\x00\x10\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1a\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x08\x00test.txt\x00\x05\x01\x02\x04\x00\x08\x00\x00\x00\x00\x05\x0f\x06\x0c&\x02\n\x00test data!\x00\x05\x10\x02\x04\x00\n\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1c\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x1b\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x01\x00\x00\x00\x00\x05\x01\x05\x03\x02\x06\x0c\x05\x03\x05\x03$3')}
+harddrive._backend_update()
 computer.set_filesystem(harddrive)
 computer.add_peripheral(terminalscreen)
 computer.set_os(operatingsystem)
@@ -4899,6 +5055,7 @@ print(computer.memory.memorypartitions)
 # print(computer.memory.memorypartitions[('proc', 1)].stack.data)
 print(computer.operatingsystem.processes[0].output)
 print("Done process 0")
+print(computer.operatingsystem.log)
 computer.operatingsystem.process_await(pid2)
 print(computer.operatingsystem.processes)
 print(computer.operatingsystem.processes[1].processmemory.stack.data)
@@ -4906,4 +5063,5 @@ print(computer.operatingsystem.processes[1].output)
 # print(computer.memory.memorypartitions[('mem', 0)].data)
 # print(computer.memory.memorypartitions[('mem', 1)].data)
 computer.operatingsystem.stop_os()
-print(computer.operatingsystem.log)
+print(computer.filesystem.filesystem)
+print(p.cmdhandler.current_working_dir)
