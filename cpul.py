@@ -4134,6 +4134,9 @@ class ProcessCMDHandler:
 			# Check if the command is a file
 			# FUTURE TODO: Environment Variables
 			directory_list = self.computer.filesystem.list_directory(self.current_working_dir)
+			if directory_list[0] != 0:
+				return directory_list
+			directory_list = directory_list[1]
 			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list):
 				# Command is a file
 				# Get full main command name
@@ -4195,7 +4198,33 @@ class ProcessCMDHandler:
 					return (0, bytes(self.current_working_dir, ENCODING))
 			elif maincommand == 'ldir':
 				# List the current directory, separated by newlines
-				pass
+				# Get full path
+				if args:
+					if args[0].startswith('/') or args[0].startswith('\\'):
+						# Absolute
+						fullpath = args[0]
+					else:
+						# Relative
+						fullpath = os.path.join(self.current_working_dir, args[0])
+				else:
+					fullpath = self.current_working_dir
+
+				exitcode = self.computer.filesystem.list_directory(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+
+				listdir = exitcode[1]
+
+				if pipetofile:
+					return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(listdir, ENCODING))[0], bytes(listdir, ENCODING))
+				return (0, bytes(listdir, ENCODING))
+			elif maincommand == 'echo':
+				# Echo the arguments
+				data = ' '.join(args)
+
+				if pipetofile:
+					return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
+				return (0, bytes(data, ENCODING))
 
 			return (36, "Illegal command.")
 
@@ -5058,8 +5087,6 @@ print("Done process 0")
 print(computer.operatingsystem.log)
 computer.operatingsystem.process_await(pid2)
 print(computer.operatingsystem.processes)
-print(computer.operatingsystem.processes[1].processmemory.stack.data)
-print(computer.operatingsystem.processes[1].output)
 # print(computer.memory.memorypartitions[('mem', 0)].data)
 # print(computer.memory.memorypartitions[('mem', 1)].data)
 computer.operatingsystem.stop_os()

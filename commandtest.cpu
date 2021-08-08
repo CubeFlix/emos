@@ -6,16 +6,16 @@ MOV R[RAX], [34]
 SYS
 EIR
 
-MOV R[RBX], U[ES]
-PUSHN ["cd folder"]
-MOV R[RCX], [9]
-MOV R[RAX], [34]
-SYS
-EIR
+# MOV R[RBX], U[ES]
+# PUSHN ["cd folder"]
+# MOV R[RCX], [9]
+# MOV R[RAX], [34]
+# SYS
+# EIR
 
 MOV R[RBX], U[ES]
-PUSHN ["cd > cddata"]
-MOV R[RCX], [11]
+PUSHN ["echo hi > cddata"]
+MOV R[RCX], [16]
 MOV R[RAX], [34]
 SYS
 EIR
