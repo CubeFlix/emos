@@ -849,445 +849,416 @@ class Compiler:
 
 		return self.compiled, self.data_index
 
-
-# code = '''
-# # Counts to 0xaa
-# [start_loop]
-# # Add 1 to RAX
-# ADD REG[RAX, [0x00] : [0x04]], [4d1], REG[RAX, [0x00] : [0x04]]
-# # Compare RAX to 0xaa
-# CMP REG[RAX, [0x00] : [0x04]], [0xaa]
-# # Jump if less than
-# JL SYM[start_loop]
-# # End
-# '''
-
-# code = '''
-# # Counts memory to 0xaa
-# [start_loop]
-# # Add 1 to the memory
-# ADD MEM[REG[DS, [0x04] : [0x04]] : [0x04]], [0x01], MEM[REG[DS, [0x04] : [0x04]] : [0x04]]
-# # Compare memory to 0xaa
-# CMP MEM[REG[DS, [0x04] : [0x04]] : [0x04]], [0xaa]
-# # Jump if less than
-# JL SYM[start_loop]
-# # End
-# '''
-
-
-# code = '''# Functions test
-# 
-# [.code]
-# 
-# [main]
-# # Main beginning code
-# 
-# # Prepare variables for function 1
-# MOV MEM[REG[RBP, [0x4] : [0x4]] : [0x4]], [4d4]
-# PUSH [4d8]
-# 
-# 
-# # Call function 1
-# JMP SYM[func1]
-# 
-# [callback]
-# # Place to jump back to after function 1 was called
-# 
-# HLT
-# 
-# [func1]
-# # Function 1
-# 
-# POP REG[RAX, [0x0] : [0x4]]
-# POP REG[RBX, [0x0] : [0x4]]
-# ADD REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]], REG[RCX, [0x0] : [0x4]]
-# PUSH REG[RCX, [0x0] : [0x4]]
-# 
-# JMP SYM[callback]
-# 
-# 
-# [func2]
-# # Function 2
-# 
-# 
-# '''
-
-# code = '''# Functions test 2
-# [.data]
-# 
-# [return] [4d0]
-# 
-# [.code]
-# 
-# [main]
-# # Main beginning code
-# 
-# # Prepare variables for function 1
-# MOV MEM[REG[RBP, [0x4] : [0x4]] : [0x4]], [4d4]
-# 
-# # Call the function
-# CALL SYM[func1]
-# 
-# # Remove our argument
-# POP REG[RAX, [0x0] : [0x4]]
-# 
-# # Halt the processor
-# HLT [0x0]
-# 
-# [func1]
-# # Function 1
-# 
-# # Get argument 1
-# SUB REG[RBP, [0x4]: [0x4]], [4d12], REG[RSI, [0x4] : [0x4]]
-# # Add one to the argument
-# ADD MEM[REG[RSI, [0x4] : [0x4]] : [0x4]], [0x1], MEM[SYM[return] : [0x4]]
-# 
-# # Return
-# RET
-# 
-# '''
-
-# code = '''# Functions test 3
-# [.data]
-# 
-# [return] [4d0]
-# 
-# [.code]
-# 
-# [main]
-# # Main beginning code
-# 
-# # Prepare variables for function 1
-# PUSH [4d4]
-# 
-# # Call the function
-# CALL SYM[func1]
-# 
-# # Remove our argument
-# POP REG[RAX, [0x0] : [0x4]]
-# 
-# # Halt the processor
-# HLT [0x0]
-# 
-# [func1]
-# # Function 1
-# 
-# # Get argument 1
-# ARGN MEM[SYM[return] : [4]], [0]
-# 
-# # Modify the value
-# ADD MEM[SYM[return] : [4]], [1], MEM[SYM[return] : [4]]
-# 
-# # Return
-# RET
-# 
-# '''
-
-# code = '''# System Call Test
-# # Running system call 2, so put 1 in RAX
-# MOV REG[RAX, [0x0] : [0x4]], [4d1]
-# # Run the system call
-# SYS'''
-
-# code = '''# Get Char System Call Test
-# 
-# [.code]
-# # Code section
-# 
-# # Running system call 3, so put 2 in RAX
-# MOV REG[RAX, [0x0] : [0x4]], [4d2]
-# 
-# # Call the system
-# SYS
-# 
-# # Put the output into DATA section
-# MOV MEM[SYM[CHARPLACE] : [0x1]], REG[RAX, [0x0] : [0x1]]
-# 
-# [.data]
-# # Data section
-# 
-# [CHARPLACE] [1d0]
-# 
-# '''
-
-# code = '''# Get Input System Call Test
-# MOV REG[RAX, [0x0] : [0x4]], [4d2]
-# SYS
-# '''
-
-# code = '''# Print to Peripheral 1
-# 
-# [.data] 
-# [hello] ["Hello!"]
-# 
-# [.code]
-# 
-# MOV PERP[[0x0], [0x0] : [0x6]], MEM[SYM[hello] : [0x6]]
-# INT [0x64]
-# 
-# '''
-
-# code = '''# Get Character from Terminal Screen
-# 
-# MOV PERP[[0x0], [0x0] : [0x6]], ["Hello!"]
-# INT [0xe0]
-# 
-# INT [0xe1]
-# 
-# PUSH REG[RAX, [0x0] : [0x4]]
-# 
-# '''
-
-# code = '''
-# # Displays "Hello, world!" to stack.
-# 
-# [.data]
-# 
-# [msg] ['Hello, world!']
-# [len] [2d13]
-# 
-# [.code]
-# 
-# MOV MEM[REG[SS, [0x04] : [0x04]] : MEM[SYM[len] : [0x02]]], MEM[SYM[msg] : MEM[SYM[len] : [0x2]]]
-# HLT
-# '''
-
-# code = '''# Write "Hello, world!" to STDOut
-# [.data]
-# 
-# [msg] ["Hello, world!", 0xa]
-# 
-# [.code]
-# 
-# MOV REG[RAX, [0] : [4]], [1]
-# MOV REG[RBX, [0] : [4]], SYM[msg]
-# MOV REG[RCX, [0] : [4]], [14]
-# SYS
-# 
-# HLT [0x0]
-# 
-# '''
-
-# code = '''# Write "Hello, world!" to STDOut and read one char from STDIn
-# [.data]
-# 
-# [msg] ["Hello, world!", 0xa]
-# 
-# [.code]
-# 
-# # Print "Hello, world!"
-# 
-# MOV REG[RAX, [0] : [4]], [1]
-# MOV REG[RBX, [0] : [4]], SYM[msg]
-# MOV REG[RCX, [0] : [4]], [14]
-# SYS
-# 
-# # Read one char
-# 
-# MOV REG[RAX, [0] : [4]], [2]
-# MOV REG[RBX, [0] : [4]], [1]
-# SYS
-# 
-# HLT [0x0]
-# 
-# '''
-
-# code = '''# Print kevin\\b
-# 
-# [.data]
-# 
-# [msg] ["kevin\b"]
-# 
-# [.code]
-# 
-# MOV REG[RAX, [0] : [4]], [1]
-# MOV REG[RBX, [0] : [4]], SYM[msg]
-# MOV REG[RCX, [0] : [4]], [6]
-# SYS
-# 
-# HLT [0x0]
-# '''
-
-# code = '''# Take input
-# [.code]
-# 
-# MOV REG[RAX, [0] : [4]], [3]
-# SYS
-# 
-# HLT[0x0]'''
-
-# code = '''# Kernel panic
-# 
-# [.code]
-# 
-# MOV REG[RAX, [0] : [4]], [4]
-# MOV REG[RBX, [0] : [4]], [0]
-# SYS
-# '''
-
-# code = '''# Hello world!
-# [.data]
-# [msg] ["Hello, world!", 0xa]
-# 
-# [.code]
-# 
-# MOV REG[RAX, [0] : [4]], [1]
-# MOV REG[RBX, [0] : [4]], SYM[msg]
-# MOV REG[RCX, [0] : [4]], [14]
-# SYS
-# 
-# PUSHN REG[RAX, [0] : [1]]
-# HLT [0x0]'''
-
-# code = '''# Call dymanic lib 1
-# 
-# MOV REG[RAX, [0] : [4]], [13]
-# MOV REG[RBX, [0] : [4]], [0]
-# SYS
-# 
-# LIB REG[RBX, [0] : [4]], [0]
-# 
-# 
-# HLT REG[RAX, [0] : [4]]
-# 
-# '''
-
-# code = '''# Heap memory test
-# MOV REG[RAX, [0] : [4]], [15]
-# SYS
-# 
-# MOV HEAP[REG[RBX, [0] : [4]], [0] : [4]], [69]
-# 
-# '''
-
-# code = '''
-# PUSH REG[RAX, [0] : [4]]
-# PUSH REG[RBX, [0] : [4]]
-# MOV REG[RAX, [0] : [4]], [13]
-# MOV REG[RBX, [0] : [4]], [100]
-# SYS
-# POP REG[RBX, [0] : [4]]
-# POP REG[RAX, [0] : [4]]
-# '''
-
-# code = '''
-# <iolib>
-# '''
-
-# code = '''<"fizzbuzz.cpu">\n'''
-# code = '''
-# MOV REG[RAX, [0x0] : [0x1]], [0x2]
-# MOV REG[RBX, [0x0] : [0x1]], [0x1]
-# SYS
-# EIR
-# POPN REG[RBX, [0x0] : [0x1]], [0x1]
-# CMP REG[RBX, [0x0] : [0x1]], ['0']
-# PUSHN REG[RBX, [0x0] : [0x1]]
-# JE SYM[zero]
-# CMP REG[RBX, [0x0] : [0x1]], ['1']
-# JE SYM[one]
-# JMP SYM[exit]
-# 
-# [zero]
-# MOV REG[RAX, [0x0] : [0x1]], [0x1]
-# SUB REG[ES, [0x4] : [0x4]], [0x1], REG[RBX, [0x0] : [0x4]]
-# MOV REG[RCX, [0x0] : [0x1]], [0x1]
-# SYS
-# JMP SYM[exit]
-# 
-# [one]
-# MOV REG[RAX, [0x0] : [0x1]], [0x1]
-# SUB REG[ES, [0x4] : [0x4]], [0x1], REG[RBX, [0x0] : [0x4]]
-# MOV REG[RCX, [0x0] : [0x1]], [0x1]
-# SYS
-# ADD REG[RDI, [0x0] : [0x4]], [0x1], REG[RDI, [0x0] : [0x4]]
-# CMP REG[RDI, [0x0] : [0x4]], [0x64]
-# JL SYM[one]
-# JGE SYM[exit]
-# 
-# [exit]
-# HLT [0x0]
-# '''
-
-# code = '''
-# MOV REG[RAX, [0x0] : [0x4]], REG[ES, [0x4] : [0x4]]
-# PUSHN ["Hello, world!\n"]
-# PUSH REG[RAX, [0x0] : [0x4]]
-# PUSH [14]
-# CALL SYM[printf]
-# POP REG[RAX, [0x0] : [0x4]]
-# POP REG[RAX, [0x0] : [0x4]]
-# HLT [0x0]
-# 
-# [printf]
-# MOV REG[RAX, [0x0] : [0x1]], [0x1]
-# ARGN REG[RBX, [0x0] : [0x4]], [0x1]
-# ARGN REG[RCX, [0x0] : [0x4]], [0x0]
-# SYS
-# EIR
-# RET
-# '''
-
-# code = '''
-# [start_loop]
-# ADD R[RAX], [0x1], R[RAX]
-# CMP R[RAX], [1d100]
-# JL SYM[start_loop]
-# HLT [0x0]
-# '''
-
-# code = '''
-# PUSH [4]
-# POPNR [0x0]'''
-
-code = '''<"commandtest.cpu">'''
-
-# code = '''<WRITELIB>
-# LIB [0x0], [0x0]
-# '''
-
-# code = '''
-# PUSH R[RAX]
-# PUSH R[RBX]
-# MOV R[RAX], [13]
-# MOV R[RBX], [100]
-# SYS
-# EIR
-# POP R[RBX]
-# POP R[RAX]'''
-
-# code = '''
-# 
-# <ISLIB>
-# 
-# MOV R[R9], [123]
-# LIB [0x0], [0x0]
-# EIR
-# MOV R[RCX], R[RBX]
-# SUB U[ES], R[RBX], R[RBX]
-# MOV R[RAX], [1]
-# SYS
-# EIR
-# '''
-
-a = Compiler(code)
-# a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
-# abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 
-# asd REG[RAX, [2d4] : [0x1]], MEM[[0x1] : [0x3]]''')
-try:
-	a.parse()
-except Exception as e:
-	print(e)
-	print(a.code)
-a.compile()
-print(a.compiled)
-print(a.data_index)
-o = open('code.c', 'wb')
-o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
-o.close()
-o2 = open('data.c', 'wb')
-o2.write(a.compiled[a.data_index : ] if a.data_index else b'')
-o2.close()
-print(len(a.compiled))
-# print(a.code)
-# print(a.tree)
+if __name__ == '__main__':
+	# code = '''
+	# # Counts to 0xaa
+	# [start_loop]
+	# # Add 1 to RAX
+	# ADD REG[RAX, [0x00] : [0x04]], [4d1], REG[RAX, [0x00] : [0x04]]
+	# # Compare RAX to 0xaa
+	# CMP REG[RAX, [0x00] : [0x04]], [0xaa]
+	# # Jump if less than
+	# JL SYM[start_loop]
+	# # End
+	# '''
+	# code = '''
+	# # Counts memory to 0xaa
+	# [start_loop]
+	# # Add 1 to the memory
+	# ADD MEM[REG[DS, [0x04] : [0x04]] : [0x04]], [0x01], MEM[REG[DS, [0x04] : [0x04]] : [0x04]]
+	# # Compare memory to 0xaa
+	# CMP MEM[REG[DS, [0x04] : [0x04]] : [0x04]], [0xaa]
+	# # Jump if less than
+	# JL SYM[start_loop]
+	# # End
+	# '''
+	# code = '''# Functions test
+	# 
+	# [.code]
+	# 
+	# [main]
+	# # Main beginning code
+	# 
+	# # Prepare variables for function 1
+	# MOV MEM[REG[RBP, [0x4] : [0x4]] : [0x4]], [4d4]
+	# PUSH [4d8]
+	# 
+	# 
+	# # Call function 1
+	# JMP SYM[func1]
+	# 
+	# [callback]
+	# # Place to jump back to after function 1 was called
+	# 
+	# HLT
+	# 
+	# [func1]
+	# # Function 1
+	# 
+	# POP REG[RAX, [0x0] : [0x4]]
+	# POP REG[RBX, [0x0] : [0x4]]
+	# ADD REG[RAX, [0x0] : [0x4]], REG[RBX, [0x0] : [0x4]], REG[RCX, [0x0] : [0x4]]
+	# PUSH REG[RCX, [0x0] : [0x4]]
+	# 
+	# JMP SYM[callback]
+	# 
+	# 
+	# [func2]
+	# # Function 2
+	# 
+	# 
+	# '''
+	# code = '''# Functions test 2
+	# [.data]
+	# 
+	# [return] [4d0]
+	# 
+	# [.code]
+	# 
+	# [main]
+	# # Main beginning code
+	# 
+	# # Prepare variables for function 1
+	# MOV MEM[REG[RBP, [0x4] : [0x4]] : [0x4]], [4d4]
+	# 
+	# # Call the function
+	# CALL SYM[func1]
+	# 
+	# # Remove our argument
+	# POP REG[RAX, [0x0] : [0x4]]
+	# 
+	# # Halt the processor
+	# HLT [0x0]
+	# 
+	# [func1]
+	# # Function 1
+	# 
+	# # Get argument 1
+	# SUB REG[RBP, [0x4]: [0x4]], [4d12], REG[RSI, [0x4] : [0x4]]
+	# # Add one to the argument
+	# ADD MEM[REG[RSI, [0x4] : [0x4]] : [0x4]], [0x1], MEM[SYM[return] : [0x4]]
+	# 
+	# # Return
+	# RET
+	# 
+	# '''
+	# code = '''# Functions test 3
+	# [.data]
+	# 
+	# [return] [4d0]
+	# 
+	# [.code]
+	# 
+	# [main]
+	# # Main beginning code
+	# 
+	# # Prepare variables for function 1
+	# PUSH [4d4]
+	# 
+	# # Call the function
+	# CALL SYM[func1]
+	# 
+	# # Remove our argument
+	# POP REG[RAX, [0x0] : [0x4]]
+	# 
+	# # Halt the processor
+	# HLT [0x0]
+	# 
+	# [func1]
+	# # Function 1
+	# 
+	# # Get argument 1
+	# ARGN MEM[SYM[return] : [4]], [0]
+	# 
+	# # Modify the value
+	# ADD MEM[SYM[return] : [4]], [1], MEM[SYM[return] : [4]]
+	# 
+	# # Return
+	# RET
+	# 
+	# '''
+	# code = '''# System Call Test
+	# # Running system call 2, so put 1 in RAX
+	# MOV REG[RAX, [0x0] : [0x4]], [4d1]
+	# # Run the system call
+	# SYS'''
+	# code = '''# Get Char System Call Test
+	# 
+	# [.code]
+	# # Code section
+	# 
+	# # Running system call 3, so put 2 in RAX
+	# MOV REG[RAX, [0x0] : [0x4]], [4d2]
+	# 
+	# # Call the system
+	# SYS
+	# 
+	# # Put the output into DATA section
+	# MOV MEM[SYM[CHARPLACE] : [0x1]], REG[RAX, [0x0] : [0x1]]
+	# 
+	# [.data]
+	# # Data section
+	# 
+	# [CHARPLACE] [1d0]
+	# 
+	# '''
+	# code = '''# Get Input System Call Test
+	# MOV REG[RAX, [0x0] : [0x4]], [4d2]
+	# SYS
+	# '''
+	# code = '''# Print to Peripheral 1
+	# 
+	# [.data] 
+	# [hello] ["Hello!"]
+	# 
+	# [.code]
+	# 
+	# MOV PERP[[0x0], [0x0] : [0x6]], MEM[SYM[hello] : [0x6]]
+	# INT [0x64]
+	# 
+	# '''
+	# code = '''# Get Character from Terminal Screen
+	# 
+	# MOV PERP[[0x0], [0x0] : [0x6]], ["Hello!"]
+	# INT [0xe0]
+	# 
+	# INT [0xe1]
+	# 
+	# PUSH REG[RAX, [0x0] : [0x4]]
+	# 
+	# '''
+	# code = '''
+	# # Displays "Hello, world!" to stack.
+	# 
+	# [.data]
+	# 
+	# [msg] ['Hello, world!']
+	# [len] [2d13]
+	# 
+	# [.code]
+	# 
+	# MOV MEM[REG[SS, [0x04] : [0x04]] : MEM[SYM[len] : [0x02]]], MEM[SYM[msg] : MEM[SYM[len] : [0x2]]]
+	# HLT
+	# '''
+	# code = '''# Write "Hello, world!" to STDOut
+	# [.data]
+	# 
+	# [msg] ["Hello, world!", 0xa]
+	# 
+	# [.code]
+	# 
+	# MOV REG[RAX, [0] : [4]], [1]
+	# MOV REG[RBX, [0] : [4]], SYM[msg]
+	# MOV REG[RCX, [0] : [4]], [14]
+	# SYS
+	# 
+	# HLT [0x0]
+	# 
+	# '''
+	# code = '''# Write "Hello, world!" to STDOut and read one char from STDIn
+	# [.data]
+	# 
+	# [msg] ["Hello, world!", 0xa]
+	# 
+	# [.code]
+	# 
+	# # Print "Hello, world!"
+	# 
+	# MOV REG[RAX, [0] : [4]], [1]
+	# MOV REG[RBX, [0] : [4]], SYM[msg]
+	# MOV REG[RCX, [0] : [4]], [14]
+	# SYS
+	# 
+	# # Read one char
+	# 
+	# MOV REG[RAX, [0] : [4]], [2]
+	# MOV REG[RBX, [0] : [4]], [1]
+	# SYS
+	# 
+	# HLT [0x0]
+	# 
+	# '''
+	# code = '''# Print kevin\\b
+	# 
+	# [.data]
+	# 
+	# [msg] ["kevin\b"]
+	# 
+	# [.code]
+	# 
+	# MOV REG[RAX, [0] : [4]], [1]
+	# MOV REG[RBX, [0] : [4]], SYM[msg]
+	# MOV REG[RCX, [0] : [4]], [6]
+	# SYS
+	# 
+	# HLT [0x0]
+	# '''
+	# code = '''# Take input
+	# [.code]
+	# 
+	# MOV REG[RAX, [0] : [4]], [3]
+	# SYS
+	# 
+	# HLT[0x0]'''
+	# code = '''# Kernel panic
+	# 
+	# [.code]
+	# 
+	# MOV REG[RAX, [0] : [4]], [4]
+	# MOV REG[RBX, [0] : [4]], [0]
+	# SYS
+	# '''
+	# code = '''# Hello world!
+	# [.data]
+	# [msg] ["Hello, world!", 0xa]
+	# 
+	# [.code]
+	# 
+	# MOV REG[RAX, [0] : [4]], [1]
+	# MOV REG[RBX, [0] : [4]], SYM[msg]
+	# MOV REG[RCX, [0] : [4]], [14]
+	# SYS
+	# 
+	# PUSHN REG[RAX, [0] : [1]]
+	# HLT [0x0]'''
+	# code = '''# Call dymanic lib 1
+	# 
+	# MOV REG[RAX, [0] : [4]], [13]
+	# MOV REG[RBX, [0] : [4]], [0]
+	# SYS
+	# 
+	# LIB REG[RBX, [0] : [4]], [0]
+	# 
+	# 
+	# HLT REG[RAX, [0] : [4]]
+	# 
+	# '''
+	# code = '''# Heap memory test
+	# MOV REG[RAX, [0] : [4]], [15]
+	# SYS
+	# 
+	# MOV HEAP[REG[RBX, [0] : [4]], [0] : [4]], [69]
+	# 
+	# '''
+	# code = '''
+	# PUSH REG[RAX, [0] : [4]]
+	# PUSH REG[RBX, [0] : [4]]
+	# MOV REG[RAX, [0] : [4]], [13]
+	# MOV REG[RBX, [0] : [4]], [100]
+	# SYS
+	# POP REG[RBX, [0] : [4]]
+	# POP REG[RAX, [0] : [4]]
+	# '''
+	# code = '''
+	# <iolib>
+	# '''
+	# code = '''<"fizzbuzz.cpu">\n'''
+	# code = '''
+	# MOV REG[RAX, [0x0] : [0x1]], [0x2]
+	# MOV REG[RBX, [0x0] : [0x1]], [0x1]
+	# SYS
+	# EIR
+	# POPN REG[RBX, [0x0] : [0x1]], [0x1]
+	# CMP REG[RBX, [0x0] : [0x1]], ['0']
+	# PUSHN REG[RBX, [0x0] : [0x1]]
+	# JE SYM[zero]
+	# CMP REG[RBX, [0x0] : [0x1]], ['1']
+	# JE SYM[one]
+	# JMP SYM[exit]
+	# 
+	# [zero]
+	# MOV REG[RAX, [0x0] : [0x1]], [0x1]
+	# SUB REG[ES, [0x4] : [0x4]], [0x1], REG[RBX, [0x0] : [0x4]]
+	# MOV REG[RCX, [0x0] : [0x1]], [0x1]
+	# SYS
+	# JMP SYM[exit]
+	# 
+	# [one]
+	# MOV REG[RAX, [0x0] : [0x1]], [0x1]
+	# SUB REG[ES, [0x4] : [0x4]], [0x1], REG[RBX, [0x0] : [0x4]]
+	# MOV REG[RCX, [0x0] : [0x1]], [0x1]
+	# SYS
+	# ADD REG[RDI, [0x0] : [0x4]], [0x1], REG[RDI, [0x0] : [0x4]]
+	# CMP REG[RDI, [0x0] : [0x4]], [0x64]
+	# JL SYM[one]
+	# JGE SYM[exit]
+	# 
+	# [exit]
+	# HLT [0x0]
+	# '''
+	# code = '''
+	# MOV REG[RAX, [0x0] : [0x4]], REG[ES, [0x4] : [0x4]]
+	# PUSHN ["Hello, world!\n"]
+	# PUSH REG[RAX, [0x0] : [0x4]]
+	# PUSH [14]
+	# CALL SYM[printf]
+	# POP REG[RAX, [0x0] : [0x4]]
+	# POP REG[RAX, [0x0] : [0x4]]
+	# HLT [0x0]
+	# 
+	# [printf]
+	# MOV REG[RAX, [0x0] : [0x1]], [0x1]
+	# ARGN REG[RBX, [0x0] : [0x4]], [0x1]
+	# ARGN REG[RCX, [0x0] : [0x4]], [0x0]
+	# SYS
+	# EIR
+	# RET
+	# '''
+	# code = '''
+	# [start_loop]
+	# ADD R[RAX], [0x1], R[RAX]
+	# CMP R[RAX], [1d100]
+	# JL SYM[start_loop]
+	# HLT [0x0]
+	# '''
+	# code = '''
+	# PUSH [4]
+	# POPNR [0x0]'''
+	code = '''<"commandtest.cpu">'''
+	# code = '''<WRITELIB>
+	# LIB [0x0], [0x0]
+	# '''
+	# code = '''
+	# PUSH R[RAX]
+	# PUSH R[RBX]
+	# MOV R[RAX], [13]
+	# MOV R[RBX], [100]
+	# SYS
+	# EIR
+	# POP R[RBX]
+	# POP R[RAX]'''
+	# code = '''
+	# 
+	# <ISLIB>
+	# 
+	# MOV R[R9], [123]
+	# LIB [0x0], [0x0]
+	# EIR
+	# MOV R[RCX], R[RBX]
+	# SUB U[ES], R[RBX], R[RBX]
+	# MOV R[RAX], [1]
+	# SYS
+	# EIR
+	# '''
+	a = Compiler(code)
+	# a = Parser('''abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\" ] ] 
+	# abc   REG [ RAX , [ 2d4 ] : [ "123 \\n\\\\", 0x2] ] 
+	# asd REG[RAX, [2d4] : [0x1]], MEM[[0x1] : [0x3]]''')
+	try:
+		a.parse()
+	except Exception as e:
+		print(e)
+		print(a.code)
+	a.compile()
+	print(a.compiled)
+	print(a.data_index)
+	o = open('code.c', 'wb')
+	o.write(a.compiled[ : a.data_index if a.data_index else len(a.compiled)])
+	o.close()
+	o2 = open('data.c', 'wb')
+	o2.write(a.compiled[a.data_index : ] if a.data_index else b'')
+	o2.close()
+	print(len(a.compiled))
+	# print(a.code)
+	# print(a.tree)
+	

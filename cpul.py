@@ -2647,9 +2647,7 @@ class FileSystem:
 				traversal_history.append(traversal_history[-1][item])
 			except (KeyError, TypeError):
 				return (32, "Path is invalid.")
-		# Check the final file
-		if not type(traversal_history[-1]) in (bytes, bytearray):
-			return (32, "Path is invalid.")
+		# Allow folders and files
 		# Rename the file using the second to last reference in the traversal history
 		traversal_history[-2][new_name] = traversal_history[-2].pop(split_path[-1])
 		# Update
@@ -4123,11 +4121,10 @@ class ProcessCMDHandler:
 			# Add pipe command data
 			if pipecommand:
 				# Run the pipe command
-				exitcode, output = self.handle(' '.join(pipecommand))
+				exitcode, stdout_data = self.handle(' '.join(pipecommand))
 				if exitcode != 0:
 					return (35, "Error handling command. [" + str(e) + "]")
 				# Output should be a copy of the now terminated process
-				stdout_data = output.stdout.data
 				args += shlex.split(str(stdout_data, ENCODING))
 
 			# Run the final command
@@ -4225,6 +4222,47 @@ class ProcessCMDHandler:
 				if pipetofile:
 					return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
 				return (0, bytes(data, ENCODING))
+			elif maincommand == 'del':
+				# Delete a file or folder
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+
+				# Delete the path
+				if self.computer.filesystem.delete_file(fullpath)[0] != 0:
+					return self.computer.filesystem.delete_directory(fullpath)
+				else:
+					return (0, b'')
+
+			elif maincommand == 'rm':
+				# Rename a file or folder
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+
+				# Rename the path
+				return (self.computer.filesystem.rename_file(fullpath, args[1])[0], b'')
+
+			elif maincommand == 'mkdir':
+				# Create a folder
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+
+				# Create the path
+				return (self.computer.filesystem.create_directory(fullpath)[0], b'')
 
 			return (36, "Illegal command.")
 
