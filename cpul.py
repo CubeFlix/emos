@@ -2115,9 +2115,6 @@ class CPUCore:
 				self.error = True
 		except Exception as e:
 			# Catch internal errors
-			# Temp
-			import traceback
-			traceback.print_exc()
 			self.cpu.update_from_computer()
 			self.processmemory = self.cpu.memory.memorypartitions[self.pname]
 			self.set(bytes([0xff, 0x0]), ("MEM", (int.to_bytes(self.processmemory.es, 4, byteorder='little'), bytes([2]))))
@@ -2830,8 +2827,16 @@ class Computer:
 
 		"""Start up the computer."""
 
-		# TEMP
-		# self.bootload()
+		self.operatingsystem.start_os()
+
+	def shutdown(self):
+
+		"""Shut down the computer."""
+
+		# NOTE: To avoid errors with user-side shutdown, terminals and other peripherals should not be used after the shutdown,
+		# and processes should not be accessed either, apart from debugging purposes.
+
+		self.operatingsystem.stop_os()
 
 	def add_peripheral(self, peripheral):
 
@@ -3707,6 +3712,16 @@ class OperatingSystem:
 			elif syscallid == 36:
 				# Format the FileSystem
 				self.computer.filesystem._format()
+				exitcode = (0, None)
+			elif syscallid == 37:
+				# Get the current time as a 8 byte integer and put it into RBX
+				t = int.to_bytes(int(time.time()), 8, byteorder='little')
+				self.processes[pid].threads[tid].registers['RBX'].data[0 : 8] = t
+				exitcode = (0, None)
+			elif syscallid == 38:
+				# Shut down the computer
+				self.computer.shutdown()
+				exitcode = (0, None)
 			else:
 				exitcode = (30, "Invalid SYSCall.")
 
@@ -3717,8 +3732,6 @@ class OperatingSystem:
 			# Handle exitcode
 			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
 		except Exception as e:
-			import traceback # Temp
-			traceback.print_exc() # Temp
 			# Handle exitcode
 			self.halt_thread(pid, tid, 255)
 			# Add to log
@@ -3758,8 +3771,6 @@ class OperatingSystem:
 			# Handle exitcode
 			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
 		except Exception as e:
-			import traceback # Temp
-			traceback.print_exc() # Temp
 			# Handle exitcode
 			self.halt_thread(pid, tid, 255)
 
@@ -3810,8 +3821,6 @@ class OperatingSystem:
 			# Handle exitcode
 			self.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(exitcode[0], 4, byteorder='little')
 		except Exception as e:
-			import traceback # Temp
-			traceback.print_exc() # Temp
 			# Handle exitcode
 			self.halt_thread(pid, tid, 255)
 
@@ -4047,7 +4056,6 @@ class DynamicLibrary:
 		# Exit
 		return (0, None)
 
-
 	def __del__(self):
 
 		"""Delete the library."""
@@ -4074,6 +4082,7 @@ class FPU:
 
 class GPU:
 	pass
+
 
 class ProcessCMDHandler:
 
@@ -4300,6 +4309,20 @@ class ProcessCMDHandler:
 					# Error
 					self.computer.operatingsystem.log += (str(e) + '\n')
 					return (37, "Parse error. [" + str(e) + "]")
+
+			elif maincommand == 'time':
+				# Get the current time
+				data = time.asctime()
+
+				if pipetofile:
+					return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
+				return (0, bytes(data, ENCODING))
+
+			elif maincommand == 'shutdown':
+				# Shut down the computer
+				self.computer.shutdown()
+
+				return (0, b'')
 
 			return (36, "Illegal command.")
 
@@ -5154,6 +5177,7 @@ computer.operatingsystem.terminal.remove_view()
 
 print()
 print('FINISHED PROCESS')
+print(computer.operatingsystem.log)
 print()
 print(computer.operatingsystem.processes)
 print(computer.memory.memorypartitions[('proc', 0)].stack.data)
@@ -5166,7 +5190,6 @@ print(computer.memory.memorypartitions)
 # print(computer.memory.memorypartitions[('proc', 1)].stack.data)
 print(computer.operatingsystem.processes[0].output)
 print("Done process 0")
-print(computer.operatingsystem.log)
 computer.operatingsystem.process_await(pid2)
 print(computer.operatingsystem.processes)
 # print(computer.memory.memorypartitions[('mem', 0)].data)

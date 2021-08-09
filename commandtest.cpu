@@ -1,7 +1,12 @@
 # Command test
-MOV R[RBX], U[ES]
-PUSHN ["compile code.cpu code.cbf"]
-MOV R[RCX], [25]
-MOV R[RAX], [34]
-SYS
-EIR
+# MOV R[RBX], U[ES]
+# PUSHN ["shutdown"]
+# MOV R[RCX], [8]
+# MOV R[RAX], [34]
+# SYS
+# EIR
+
+# MOV R[RAX], [38]
+# SYS
+# EIR
+# PUSHN REG[RBX, [0x0] : [0x8]]

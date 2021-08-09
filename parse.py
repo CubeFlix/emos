@@ -1225,7 +1225,7 @@ if __name__ == '__main__':
 	# code = '''
 	# PUSH [4]
 	# POPNR [0x0]'''
-	code = '''<"commandtest.cpu">'''
+	code = '''<"fibonacci.cpu">'''
 	# code = '''<WRITELIB>
 	# LIB [0x0], [0x0]
 	# '''
