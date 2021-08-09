@@ -2,6 +2,7 @@
 
 import string
 import math
+import os
 
 ENCODING = 'utf-8'
 REGISTER_NAMES = ['RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI', 'RIP', 'CS', 'DS', 'SS', 'ES', 'FLAGS', 'R8', 'R9', 'R10', 'R11', 'R12', 'R13', 'R14', 'R15']
@@ -24,16 +25,18 @@ class Compiler:
 
 	"""Compiles code."""
 
-	def __init__(self, code, filesys='comp', emos=None):
+	def __init__(self, code, filesys='comp', emos=None, currentdir=None):
 
 		"""Create the Compiler.
 		   Args: code -> code to parse and compile
 		         filesys -> the file system to load other files from. 'comp' is for computer, and 'emos' is for EMOS. 
-		         emos -> the operating system to retrieve files from"""
+		         emos -> the operating system to retrieve files from
+		         currentdir -> the current working directory for emos"""
 
 		self.code = code
 		self.filesys = filesys
 		self.emos = emos
+		self.currentdir = currentdir
 
 		self.tree = [['SEC', 'code']]
 
@@ -662,6 +665,14 @@ class Compiler:
 						file = open(filename, 'r')
 						filedata = file.read()
 						file.close()
+					elif self.filesys == 'emos':
+						# EMOS file system
+						if filename.startswith('/') or filename.startswith('\\'):
+							# Absolute path
+							filedata = str(self.emos.computer.filesystem.read_file(filename), ENCODING)
+						else:
+							# Relative path
+							filedata = str(self.emos.computer.filesystem.read_file(os.path.join(self.currentdir, filename)), ENCODING)
 					# Eat the ending char
 					self.parse_through_whitespace_nonewline()
 					if self.next_char() != '>':

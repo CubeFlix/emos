@@ -1,35 +1,7 @@
 # Command test
 MOV R[RBX], U[ES]
-PUSHN ["file"]
-MOV R[RCX], [4]
+PUSHN ["compile code.cpu code.cbf"]
+MOV R[RCX], [25]
 MOV R[RAX], [34]
 SYS
 EIR
-
-MOV R[RBX], U[ES]
-PUSHN ["cd folder/../folder"]
-MOV R[RCX], [19]
-MOV R[RAX], [34]
-SYS
-EIR
-
-MOV R[RBX], U[ES]
-PUSHN ["mkdir hello"]
-MOV R[RCX], [11]
-MOV R[RAX], [34]
-SYS
-EIR
-
-# MOV R[RBX], U[ES]
-# PUSHN ["echo hi > cddata"]
-# MOV R[RCX], [16]
-# MOV R[RAX], [34]
-# SYS
-# EIR
-# 
-# MOV R[RBX], U[ES]
-# PUSHN ["echo fdsdf > echothing | echo < cddata"]
-# MOV R[RCX], [38]
-# MOV R[RAX], [34]
-# SYS
-# EIR

@@ -9,6 +9,7 @@ import copy
 import pickle
 import shlex
 import os, sys
+import parse
 
 
 # Constants
@@ -4264,6 +4265,42 @@ class ProcessCMDHandler:
 				# Create the path
 				return (self.computer.filesystem.create_directory(fullpath)[0], b'')
 
+			elif maincommand == 'compile':
+				# Compile a file
+				try:
+					# Get full path
+					if args[0].startswith('/') or args[0].startswith('\\'):
+						# Absolute
+						fullpath = args[0]
+					else:
+						# Relative
+						fullpath = os.path.join(self.current_working_dir, args[0])
+						
+					# Get the file
+					exitcode = self.computer.filesystem.read_file(fullpath)
+					if exitcode[0] != 0:
+						return exitcode
+					codefile = str(exitcode[1], ENCODING)
+
+					# Parse and compile the code
+					parser = parse.Compiler(codefile, 'emos', self.computer.operatingsystem, self.current_working_dir)
+					parser.parse()
+					parser.compile()
+
+					# Write the code to the file
+					# Get full path
+					if args[1].startswith('/') or args[1].startswith('\\'):
+						# Absolute
+						fullpath = args[1]
+					else:
+						# Relative
+						fullpath = os.path.join(self.current_working_dir, args[1])
+					return (self.computer.filesystem.write_file(fullpath, parser.compiled)[0], b'')
+				except Exception as e:
+					# Error
+					self.computer.operatingsystem.log += (str(e) + '\n')
+					return (37, "Parse error. [" + str(e) + "]")
+
 			return (36, "Illegal command.")
 
 		except Exception as e:
@@ -5064,7 +5101,14 @@ operatingsystem = OperatingSystem(computer)
 terminalscreen = TerminalScreen(computer)
 harddrive = FileSystem(computer, "test.fs")
 harddrive._format()
-harddrive.filesystem = {'file.cbf' : bytearray(b'\xbc\x00\x00\x00\x00\x05\x03\x06\x0c&\x02\x06\x00folder\x00\x05\x01\x02\x04\x00\x06\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1f\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x10\x00folder/../folder\x00\x05\x01\x02\x04\x00\x10\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1a\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x08\x00test.txt\x00\x05\x01\x02\x04\x00\x08\x00\x00\x00\x00\x05\x0f\x06\x0c&\x02\n\x00test data!\x00\x05\x10\x02\x04\x00\n\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1c\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x1b\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x01\x00\x00\x00\x00\x05\x01\x05\x03\x02\x06\x0c\x05\x03\x05\x03$3')}
+# harddrive.filesystem = {'file.cbf' : bytearray(b'\xbc\x00\x00\x00\x00\x05\x03\x06\x0c&\x02\x06\x00folder\x00\x05\x01\x02\x04\x00\x06\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1f\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x10\x00folder/../folder\x00\x05\x01\x02\x04\x00\x10\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1a\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x08\x00test.txt\x00\x05\x01\x02\x04\x00\x08\x00\x00\x00\x00\x05\x0f\x06\x0c&\x02\n\x00test data!\x00\x05\x10\x02\x04\x00\n\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1c\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x1b\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x01\x00\x00\x00\x00\x05\x01\x05\x03\x02\x06\x0c\x05\x03\x05\x03$3')}
+harddrive.write_file('code.cpu', b"""# Command test
+MOV R[RBX], U[ES]
+PUSHN ["compile code.cpu code.cbf"]
+MOV R[RCX], [25]
+MOV R[RAX], [34]
+SYS
+EIR""")
 harddrive._backend_update()
 computer.set_filesystem(harddrive)
 computer.add_peripheral(terminalscreen)
