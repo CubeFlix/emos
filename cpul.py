@@ -4257,7 +4257,7 @@ class ProcessCMDHandler:
 				else:
 					return (0, b'')
 
-			elif maincommand == 'rm':
+			elif maincommand == 'rname':
 				# Rename a file or folder
 				# Get full path
 				if args[0].startswith('/') or args[0].startswith('\\'):
@@ -4360,6 +4360,32 @@ class ProcessCMDHandler:
 					return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if not (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
 				return (0, bytes(data, ENCODING))
 
+			elif maincommand == 'run':
+				# Run a shell script
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+					
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				codefile = str(exitcode[1], ENCODING)
+
+				# Split the code file
+				code_split = codefile.split('\n')
+				# Run each command
+				for command in code_split:
+					exitcode, output = self.handle(command)
+					if exitcode != 0:
+						return (exitcode, output)
+
+				return (0, b'')
+
 			return (36, "Illegal command.")
 
 		except Exception as e:
@@ -4401,6 +4427,23 @@ class ProcessCMDHandler:
 class CMDHandler:
 
 	"""The main command handler."""
+
+	# Command help sheet
+	COMMANDS_HELP = {
+		'cd' : 'Change the directory or get the current directory.',
+		'ldir' : 'List the contents of the current directory or any other directory.',
+		'echo' : 'Echo back the arguments.',
+		'del' : 'Delete a file or folder.',
+		'rname' : 'Rename a file or folder.',
+		'mkdir' : 'Create a new directory.',
+		'compile' : 'Compile and link EMOS code.',
+		'time' : 'Get the current time.',
+		'shutdown' : 'Shut down the computer.',
+		'clear' : 'Clear the screen',
+		'read' : 'Read a file from the computer.',
+		'edit' : 'Edit a file to the computer.',
+		'help' : 'Get help.'
+	}
 
 	def __init__(self, current_working_dir):
 
@@ -4611,7 +4654,7 @@ class CMDHandler:
 				else:
 					return (0, b'')
 
-			elif maincommand == 'rm':
+			elif maincommand == 'rname':
 				# Rename a file or folder
 				# Get full path
 				if args[0].startswith('/') or args[0].startswith('\\'):
@@ -4744,6 +4787,46 @@ class CMDHandler:
 						
 				# Write to the file
 				return (self.computer.filesystem.write_file(fullpath, data)[0], b'')
+
+			elif maincommand == 'help':
+				# Get help with a command or get a description of all commands
+				if args:
+					# Get help with a certain command
+					return (0, bytes(self.COMMANDS_HELP[args[0]] if args[0] in self.COMMANDS_HELP else 'The command does not exist.', ENCODING))
+				# Get all commands
+				text = ''
+				for name in self.COMMANDS_HELP:
+					text += name.upper() + ': ' + self.COMMANDS_HELP[name] + '\n'
+
+				return (0, bytes(text, ENCODING))
+
+			elif maincommand == 'run':
+				# Run a shell script
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+					
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				codefile = str(exitcode[1], ENCODING)
+
+				# Split the code file
+				code_split = codefile.split('\n')
+				# Run each command
+				for command in code_split:
+					exitcode, output = self.handle(command)
+					if exitcode != 0:
+						return (exitcode, output)
+					else:
+						self.terminal.print_terminal(output + b'\n')
+
+				return (0, b'')
 
 			return (36, "Illegal command.")
 
