@@ -4305,6 +4305,9 @@ class ProcessCMDHandler:
 					parser.parse()
 					parser.compile()
 
+					compiled = parser.compiled
+					linked = bytearray(int.to_bytes((parser.data_index if parser.data_index else len(parser.compiled)), 4, byteorder='little')) + compiled
+
 					# Write the code to the file
 					# Get full path
 					if args[1].startswith('/') or args[1].startswith('\\'):
@@ -4313,7 +4316,7 @@ class ProcessCMDHandler:
 					else:
 						# Relative
 						fullpath = os.path.join(self.current_working_dir, args[1])
-					return (self.computer.filesystem.write_file(fullpath, parser.compiled)[0], b'')
+					return (self.computer.filesystem.write_file(fullpath, linked)[0], b'')
 				except Exception as e:
 					# Error
 					self.computer.operatingsystem.log += (str(e) + '\n')
@@ -4331,7 +4334,31 @@ class ProcessCMDHandler:
 				# Shut down the computer
 				self.computer.shutdown()
 
+			elif maincommand == 'clear':
+				# Clear the screen
+				self.computer.operatingsystem.terminal.clear()
+
 				return (0, b'')
+
+			elif maincommand == 'read':
+				# Read a file
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+						
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				data = str(exitcode[1], ENCODING)
+
+				if pipetofile:
+					return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if not (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
+				return (0, bytes(data, ENCODING))
 
 			return (36, "Illegal command.")
 
@@ -4492,22 +4519,22 @@ class CMDHandler:
 					return (exitcode, pid)
 				# Wait for the process to finish
 				self.computer.operatingsystem.process_await(pid)
+				self.terminal.remove_view()
 				self.stealable = False
-				# Get the processes STDOut data
-				stdout_data = self.computer.operatingsystem.processes[pid].stdout.data
 				# Get the processes exitcode
 				exitcode = self.computer.operatingsystem.processes[pid].output[0]
+				# Get the processes STDOut
+				stdout_data = self.computer.operatingsystem.processes[pid].stdout.data
 
 				# Write the STDOut data to the pipe file
 				if pipetofile:
 					self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if not (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], stdout_data)
 
 				# Terminate the process
-				self.terminal.remove_view()
 				self.computer.operatingsystem.process_delete(pid)
 
 				# Return with the exitcode and STDOut data
-				return (exitcode, stdout_data)
+				return (exitcode, b'')
 
 			# Else, try to run a built-in command
 			if maincommand == 'cd':
@@ -4632,6 +4659,9 @@ class CMDHandler:
 					parser.parse()
 					parser.compile()
 
+					compiled = parser.compiled
+					linked = bytearray(int.to_bytes((parser.data_index if parser.data_index else len(parser.compiled)), 4, byteorder='little')) + compiled
+
 					# Write the code to the file
 					# Get full path
 					if args[1].startswith('/') or args[1].startswith('\\'):
@@ -4640,7 +4670,7 @@ class CMDHandler:
 					else:
 						# Relative
 						fullpath = os.path.join(self.current_working_dir, args[1])
-					return (self.computer.filesystem.write_file(fullpath, parser.compiled)[0], b'')
+					return (self.computer.filesystem.write_file(fullpath, linked)[0], b'')
 				except Exception as e:
 					# Error
 					self.computer.operatingsystem.log += (str(e) + '\n')
@@ -4658,7 +4688,62 @@ class CMDHandler:
 				# Shut down the computer
 				self.computer.shutdown()
 
+			elif maincommand == 'clear':
+				# Clear the screen
+				self.terminal.clear()
+
 				return (0, b'')
+
+			elif maincommand == 'read':
+				# Read a file
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+						
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				data = str(exitcode[1], ENCODING)
+
+				# Get the number of lines
+				if len(args) == 2:
+					# Get length attribute
+					lines = int(args[1])
+					data = '\n'.join(data.split('\n')[ : lines])
+
+				if pipetofile:
+					return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if not (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
+				return (0, bytes(data, ENCODING))
+
+			elif maincommand == 'edit':
+				# Edit a multi-line file
+				editor = WRITELIB(self.computer.operatingsystem, None, None)
+				data = editor.editor()
+
+				self.terminal.print_terminal(b"Save (y/n)? ")
+				exitcode, save_yn = self.terminal.get_input()
+				if exitcode != 0:
+					return (exitcode, save_yn)
+				save_yn = save_yn[0].upper()
+
+				if save_yn == 'N':
+					return (0, data)
+
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+						
+				# Write to the file
+				return (self.computer.filesystem.write_file(fullpath, data)[0], b'')
 
 			return (36, "Illegal command.")
 
@@ -4959,7 +5044,7 @@ class Terminal:
 		   Args: pid -> process ID to view"""
 
 		if pid not in self.operatingsystem.processes:
-			return (20, "PID dosen't exist.")
+			return (20, "PID doesn't exist.")
 
 		# Check if a CMDHandler exists, and if so, if it is ready
 		if hasattr(self.operatingsystem, 'cmdhandler'):
@@ -5048,6 +5133,17 @@ class Terminal:
 			self.computer.peripherals[self.terminalID].update_screen()
 
 		return (0, None)
+
+	def clear(self):
+
+		"""Clear the terminal window."""
+
+		self.data = b''
+
+		if self.state in ('proc', 'kern'):
+			self.stdout.data = b''
+
+		self.notify_change()
 
 	def get_char(self):
 
@@ -5461,13 +5557,53 @@ terminalscreen = TerminalScreen(computer)
 harddrive = FileSystem(computer, "test.fs")
 harddrive._format()
 # harddrive.filesystem = {'file.cbf' : bytearray(b'\xbc\x00\x00\x00\x00\x05\x03\x06\x0c&\x02\x06\x00folder\x00\x05\x01\x02\x04\x00\x06\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1f\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x10\x00folder/../folder\x00\x05\x01\x02\x04\x00\x10\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1a\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x08\x00test.txt\x00\x05\x01\x02\x04\x00\x08\x00\x00\x00\x00\x05\x0f\x06\x0c&\x02\n\x00test data!\x00\x05\x10\x02\x04\x00\n\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1c\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x1b\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x01\x00\x00\x00\x00\x05\x01\x05\x03\x02\x06\x0c\x05\x03\x05\x03$3')}
-# harddrive.write_file('code.cpu', b"""# Command test
-# MOV R[RBX], U[ES]
-# PUSHN ["compile code.cpu code.cbf"]
-# MOV R[RCX], [25]
-# MOV R[RAX], [34]
-# SYS
-# EIR""")
+harddrive.write_file('code.cpu', b"""# Fibonacci Series
+
+<ISLIB>
+
+[.code]
+
+# Place current value into stack
+MOV U[RAX], U[ES]
+MOV MEM[U[ES] : [0x4]], [1]
+
+# Place last value into stack
+MOV U[RBX], U[ES]
+MOV MEM[U[ES] : [0x4]], [1]
+
+# Beginning loop
+[beginloop]
+
+# Write the current value
+MOV R[R9], MEM[U[RAX] : [0x4]]
+
+# Change the value into a string
+LIB [0x0], [0x0]
+EIR
+
+# Add a newline
+PUSHN ["\n"]
+ADD R[RBX], [0x1], R[RBX]
+
+# Print the value
+MOV R[RAX], [1]
+MOV R[RCX], R[RBX]
+SUB U[ES], R[RBX], R[RBX]
+SYS
+EIR
+POPNR R[RCX]
+
+# Update the values
+MOV R[RAX], MEM[U[RBX] : [0x4]]
+MOV MEM[U[RBX] : [0x4]], MEM[U[RAX] : [0x4]]
+ADD R[RAX], MEM[U[RAX] : [0x4]], MEM[U[RAX] : [0x4]]
+
+# Loop
+CMP MEM[U[RAX] : [0x4]], [1d100]
+JLE SYM[beginloop]
+
+# End
+HLT [0x0]""")
 harddrive._backend_update()
 computer.set_filesystem(harddrive)
 computer.add_peripheral(terminalscreen)
