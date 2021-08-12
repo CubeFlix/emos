@@ -10,6 +10,7 @@ import pickle
 import shlex
 import os, sys
 import parse
+import hashlib
 
 
 # Constants
@@ -2755,7 +2756,7 @@ class FileSystem:
 
 		"""Get the full file system buffer."""
 
-		return pickle.dumps(self.filesystem)
+		return pickle.dumps([self.filesystem, self.password])
 
 	def _backend_load(self):
 
@@ -2765,7 +2766,7 @@ class FileSystem:
 			f = open(self.outfile, 'rb')
 		except Exception as e:
 			raise SysError("Output file for FileSystem does not exist.")
-		self.filesystem = pickle.loads(f.read())
+		self.filesystem, self.password = pickle.loads(f.read())
 		f.close()
 
 	def _backend_update(self):
@@ -2776,11 +2777,12 @@ class FileSystem:
 		f.write(self.get_full_buffer())
 		f.close()
 
-	def _format(self):
+	def _format(self, password=None):
 
 		"""Format the hard drive."""
 
 		self.filesystem = {}
+		self.password = hashlib.sha256(bytes(password, ENCODING)).digest()
 		self._backend_update()
 
 
@@ -2902,12 +2904,14 @@ class OperatingSystem:
 	"""The main operating system or OS the computer uses. System calls through interrupts can allow for memory and process management (heap and process memory), along with other things such as IO.
 	   The OS also handles files and process management with memory, ensuring that we don't run out. Finally, the OS can also switch into user mode, letting the user control everything."""
 
-	def __init__(self, computer):
+	def __init__(self, computer, has_password=True):
 
 		"""Create the operating system.
-		   Args: computer -> the computer the operating system is installed on"""
+		   Args: computer -> the computer the operating system is installed on
+		         has_password -> does the operating system use a password"""
 
 		self.computer = computer
+		self.has_password = has_password
 
 		self.mem_alloc_ids = []
 
@@ -3938,6 +3942,52 @@ class OperatingSystem:
 
 		# Start the terminal
 		self.terminal.start()
+
+		centered_text = ' EMOS '
+		num_padding = int((self.computer.peripherals[self.terminalID].cols - len(centered_text)) / 2)
+		self.terminal.print_terminal(bytes('-' * self.computer.peripherals[self.terminalID].cols, ENCODING))
+		self.terminal.print_terminal(b'\n')
+		self.terminal.print_terminal(bytes('-' * num_padding + centered_text + '-' * num_padding, ENCODING))
+		self.terminal.print_terminal(b'\n')
+		self.terminal.print_terminal(bytes('-' * self.computer.peripherals[self.terminalID].cols, ENCODING))
+		self.terminal.print_terminal(b'\n')
+
+		# Authenticate the user
+		if self.computer.filesystem.password:
+			# Computer should have a password
+			self.terminal.print_terminal(b'PASSWORD: ')
+			# Get the password
+			entered_password = ''
+			while True:
+				exitcode, char = self.terminal.get_char()
+				if exitcode != 0:
+					return (exitcode, char)
+
+				if char == '\b':
+					# Backspace
+					entered_password = entered_password[ : -1]
+					self.terminal.print_terminal(b'\b')
+					continue
+				elif char in ('\n', '\r'):
+					# Newline
+					self.terminal.print_terminal(b'\n')
+					break
+
+				entered_password += char
+				self.terminal.print_terminal(b'*')
+
+			# Check the password
+			if hashlib.sha256(bytes(entered_password, ENCODING)).digest() == self.computer.filesystem.password:
+				# Continue
+				pass
+			else:
+				# Incorrect password
+				self.terminal.print_terminal(b'INCORRECT PASSWORD')
+				return (39, "Incorrect password.")
+
+		# Try to start the command handler
+		if hasattr(self, 'cmdhandler'):
+			self.cmdhandler.start()
 
 		# Start the process main loop
 		self.process_mainloop()
@@ -5638,7 +5688,8 @@ computer.set_memory(memory)
 operatingsystem = OperatingSystem(computer)
 terminalscreen = TerminalScreen(computer)
 harddrive = FileSystem(computer, "test.fs")
-harddrive._format()
+harddrive._backend_load()
+harddrive._format('Kevin2009')
 # harddrive.filesystem = {'file.cbf' : bytearray(b'\xbc\x00\x00\x00\x00\x05\x03\x06\x0c&\x02\x06\x00folder\x00\x05\x01\x02\x04\x00\x06\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1f\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x10\x00folder/../folder\x00\x05\x01\x02\x04\x00\x10\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1a\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x08\x00test.txt\x00\x05\x01\x02\x04\x00\x08\x00\x00\x00\x00\x05\x0f\x06\x0c&\x02\n\x00test data!\x00\x05\x10\x02\x04\x00\n\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1c\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x1b\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x01\x00\x00\x00\x00\x05\x01\x05\x03\x02\x06\x0c\x05\x03\x05\x03$3')}
 harddrive.write_file('code.cpu', b"""# Fibonacci Series
 
@@ -5758,4 +5809,3 @@ operatingsystem.set_cmd_handler(cmdhandler)
 # print(p.cmdhandler.current_working_dir)
 
 computer.start()
-cmdhandler.start()
