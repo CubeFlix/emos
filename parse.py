@@ -1231,7 +1231,7 @@ if __name__ == '__main__':
 	# code = '''
 	# PUSH [4]
 	# POPNR [0x0]'''
-	code = '''<"fibonacci.cpu">'''
+	code = '''<"hexview.cpu">'''
 	# code = '''<WRITELIB>
 	# LIB [0x0], [0x0]
 	# '''

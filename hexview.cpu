@@ -1,0 +1,105 @@
+[.data]
+# Hexadecimal digit character list
+[charlist] ["0123456789ABCDEF"]
+
+[.code]
+JMP SYM[main]
+
+[malloc]
+# Allocate heap memory
+MOV R[RAX], [15]
+SYS
+EIR
+MOV R[RAX], R[RBX]
+RET
+
+[print_heap]
+ARGN R[RAX], [2]
+ARGN R[RBX], [1]
+ARGN R[RCX], [0]
+PUSHN HEAP[R[RAX], R[RBX] : R[RCX]]
+MOV R[RAX], [1]
+SUB U[ES], R[RCX], R[RBX]
+SYS
+EIR
+POPNR R[RCX]
+RET
+
+[main]
+# Get the file
+# Get the length of the file name
+MOV R[RAX], [18]
+SYS
+EIR
+# Get the file name
+MOV R[RAX], [2]
+SYS
+EIR
+# Read the file
+MOV R[RAX], [27]
+# Put the length of the file name into RCX
+MOV R[RCX], R[RBX]
+# Get the beginning of the file name
+SUB U[ES], R[RBX], R[RBX]
+SYS
+EIR
+# Move the file data into a heap section
+# Save the register RBX
+PUSH R[RBX]
+# Call malloc
+CALL SYM[malloc]
+# Put back RBX
+POP R[RBX]
+# Move the data
+# Get the beginning offset of the file data
+SUB U[ES], R[RBX], R[RCX]
+MOV HEAP[R[RAX], [0x0] : R[RBX]], MEM[R[RCX] : R[RBX]]
+# Print the file's data
+# Put current index into RCX
+MOV R[RCX], [0]
+# Call malloc to get a heap section for the output
+PUSH R[RAX]
+PUSH R[RBX]
+CALL SYM[malloc]
+# Put the ID into R12
+MOV R[R12], R[RAX]
+POP R[RBX]
+POP R[RAX]
+# Store the length of the data into R13
+MOV R[R13], [0]
+# Beginning of the loop
+[startloop]
+# Compare the index with the length of the data
+CMP R[RCX], R[RBX]
+# Check if we are at the end of the data
+JE SYM[endloop]
+# Read a byte from the heap into R9
+MOV REG[R9, [0x0] : [0x1]], HEAP[R[RAX], R[RCX] : [0x1]]
+# Get the hexadecimal value
+# Get the digit values
+DIV REG[R9, [0x0] : [0x1]], [0x10], R[R10], R[R11]
+# Get the digits
+ADD R[R10], SYM[charlist], R[R10]
+ADD R[R11], SYM[charlist], R[R11]
+# Put the digits into the new heap data
+MOV HEAP[R[R12], R[R13] : [0x1]], MEM[R[R10] : [0x1]]
+ADD R[R13], [0x1], R[R13]
+MOV HEAP[R[R12], R[R13] : [0x1]], MEM[R[R11] : [0x1]]
+ADD R[R13], [0x1], R[R13]
+MOV HEAP[R[R12], R[R13] : [0x1]], [' ']
+ADD R[R13], [0x1], R[R13]
+# Increment the value
+ADD R[RCX], [0x1], R[RCX]
+# Loop
+JMP SYM[startloop]
+
+[endloop]
+# Print the data
+PUSH R[R12]
+PUSH [0]
+PUSH R[R13]
+CALL SYM[print_heap]
+POPR
+POPR
+POPR
+HLT [0x0]

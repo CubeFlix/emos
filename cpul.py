@@ -1663,7 +1663,7 @@ class CPUCore:
 
 		"""Exit the program if RAX is not 0. If so, exit with exitcode in RAX."""
 
-		if self.registers['RAX'].data[ : 2] != b'\x00\x00':			
+		if self.registers['RAX'].data[ : 4] != b'\x00\x00\x00\x00':			
 			return self.halt(('REG', ('AX', b'\x00', b'\x02')))
 
 		return (0, None)
@@ -3311,7 +3311,7 @@ class OperatingSystem:
 					# Write the data to the STDOut
 					exitcode = self.processes[pid].stdout.write(data, self.terminal)
 			elif syscallid == 2:
-				# Read from the processes STDOut with the length in RBX and save it to the thread's stack
+				# Read from the processes STDIn with the length in RBX and save it to the thread's stack
 				length = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
 				exitcode, data = self.processes[pid].stdin.readn(length, self.terminal)
 				if exitcode != 0:
@@ -3323,7 +3323,7 @@ class OperatingSystem:
 					self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
 					exitcode = (0, None)
 			elif syscallid == 3:
-				# Take input from the processes STDOut, echoing back. Puts the length of the data into RAX
+				# Take input from the processes STDIn, echoing back. Puts the length of the data into RAX
 				exitcode, data = self.processes[pid].stdin.take_input(self.terminal)
 				if exitcode != 0:
 					exitcode = (exitcode, None)
@@ -4207,7 +4207,6 @@ class DynamicLibrary:
 
 
 class FPU:
-
 	pass
 
 
@@ -4286,7 +4285,7 @@ class ProcessCMDHandler:
 				if file_data[0] != 0:
 					return file_data
 				process = self.computer.operatingsystem.run_executable_data(file_data[1])
-				process.stdin.data = ' '.join(args)
+				process.stdin.data = bytearray(b' '.join([bytes(i, ENCODING) for i in args]))
 				exitcode, pid = self.computer.operatingsystem.process_create(process)
 				if exitcode != 0:
 					return (exitcode, pid)
@@ -4613,7 +4612,7 @@ class CMDHandler:
 				exitcode, data = self.handle(input_data)
 
 				if exitcode != 0:
-					self.terminal.print_terminal(bytes('ERROR: ' + str(exitcode) + ' - ' + data, ENCODING))
+					self.terminal.print_terminal(bytes('ERROR: ' + str(exitcode) + ' - ' + str(data), ENCODING))
 				else:
 					self.terminal.print_terminal(data)
 
@@ -4678,7 +4677,7 @@ class CMDHandler:
 				if file_data[0] != 0:
 					return file_data
 				process = self.computer.operatingsystem.run_executable_data(file_data[1])
-				process.stdin.data = ' '.join(args)
+				process.stdin.data = bytearray(b' '.join([bytes(i, ENCODING) for i in args]))
 				self.stealable = True
 				exitcode, pid = self.computer.operatingsystem.process_create(process)
 				self.terminal.set_view(pid)
@@ -4902,7 +4901,7 @@ class CMDHandler:
 				save_yn = save_yn[0].upper()
 
 				if save_yn == 'N':
-					return (0, data)
+					return (0, b'')
 
 				# Get full path
 				if args[0].startswith('/') or args[0].startswith('\\'):
@@ -5526,12 +5525,12 @@ class STDIn:
 			if len(self.data) == 0:
 				return terminal.get_char()
 			else:
-				return chr(self.data.pop(0))
+				return (0, chr(self.data.pop(0)))
 		else:
 			if len(self.data) == 0:
 				return (24, "STDIn not attached to a terminal.")
 			else:
-				return chr(self.data.pop(0))
+				return (0, chr(self.data.pop(0)))
 
 	def readn(self, n, terminal):
 
@@ -5540,15 +5539,24 @@ class STDIn:
 		   		 terminal -> terminal to read from"""
 
 		if self.active:
-			if len(self.data) < n:
-				return terminal.get_chars(n)
-			else:
-				return ''.join([self.read(terminal) for i in range(n)])
+			final_text = ''
+			for i in range(n):
+				exitcode, char = self.read(terminal)
+				if exitcode != 0:
+					return (exitcode, char)
+				final_text += char
+			return (0, final_text)
 		else:
 			if len(self.data) == 0:
 				return (24, "STDIn not attached to a terminal.")
 			else:
-				return ''.join([self.read(terminal) for i in range(n)])
+				final_text = ''
+				for i in range(n):
+					exitcode, char = self.read(terminal)
+					if exitcode != 0:
+						return (exitcode, char)
+					final_text += char
+				return (0, final_text)
 
 	def take_input(self, terminal):
 
@@ -5768,53 +5776,53 @@ harddrive = FileSystem(computer, "test.fs")
 harddrive._backend_load()
 # harddrive._format('Kevin2009')
 # harddrive.filesystem = {'file.cbf' : bytearray(b'\xbc\x00\x00\x00\x00\x05\x03\x06\x0c&\x02\x06\x00folder\x00\x05\x01\x02\x04\x00\x06\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1f\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x10\x00folder/../folder\x00\x05\x01\x02\x04\x00\x10\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1a\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x08\x00test.txt\x00\x05\x01\x02\x04\x00\x08\x00\x00\x00\x00\x05\x0f\x06\x0c&\x02\n\x00test data!\x00\x05\x10\x02\x04\x00\n\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1c\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x1b\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x01\x00\x00\x00\x00\x05\x01\x05\x03\x02\x06\x0c\x05\x03\x05\x03$3')}
-harddrive.write_file('code.cpu', b"""# Fibonacci Series
-
-<ISLIB>
-
-[.code]
-
-# Place current value into stack
-MOV U[RAX], U[ES]
-MOV MEM[U[ES] : [0x4]], [1]
-
-# Place last value into stack
-MOV U[RBX], U[ES]
-MOV MEM[U[ES] : [0x4]], [1]
-
-# Beginning loop
-[beginloop]
-
-# Write the current value
-MOV R[R9], MEM[U[RAX] : [0x4]]
-
-# Change the value into a string
-LIB [0x0], [0x0]
-EIR
-
-# Add a newline
-PUSHN ["\n"]
-ADD R[RBX], [0x1], R[RBX]
-
-# Print the value
-MOV R[RAX], [1]
-MOV R[RCX], R[RBX]
-SUB U[ES], R[RBX], R[RBX]
-SYS
-EIR
-POPNR R[RCX]
-
-# Update the values
-MOV R[RAX], MEM[U[RBX] : [0x4]]
-MOV MEM[U[RBX] : [0x4]], MEM[U[RAX] : [0x4]]
-ADD R[RAX], MEM[U[RAX] : [0x4]], MEM[U[RAX] : [0x4]]
-
-# Loop
-CMP MEM[U[RAX] : [0x4]], [1d100]
-JLE SYM[beginloop]
-
-# End
-HLT [0x0]""")
+# harddrive.write_file('code.cpu', b"""# Fibonacci Series
+# 
+# <ISLIB>
+# 
+# [.code]
+# 
+# # Place current value into stack
+# MOV U[RAX], U[ES]
+# MOV MEM[U[ES] : [0x4]], [1]
+# 
+# # Place last value into stack
+# MOV U[RBX], U[ES]
+# MOV MEM[U[ES] : [0x4]], [1]
+# 
+# # Beginning loop
+# [beginloop]
+# 
+# # Write the current value
+# MOV R[R9], MEM[U[RAX] : [0x4]]
+# 
+# # Change the value into a string
+# LIB [0x0], [0x0]
+# EIR
+# 
+# # Add a newline
+# PUSHN ["\n"]
+# ADD R[RBX], [0x1], R[RBX]
+# 
+# # Print the value
+# MOV R[RAX], [1]
+# MOV R[RCX], R[RBX]
+# SUB U[ES], R[RBX], R[RBX]
+# SYS
+# EIR
+# POPNR R[RCX]
+# 
+# # Update the values
+# MOV R[RAX], MEM[U[RBX] : [0x4]]
+# MOV MEM[U[RBX] : [0x4]], MEM[U[RAX] : [0x4]]
+# ADD R[RAX], MEM[U[RAX] : [0x4]], MEM[U[RAX] : [0x4]]
+# 
+# # Loop
+# CMP MEM[U[RAX] : [0x4]], [1d100]
+# JLE SYM[beginloop]
+# 
+# # End
+# HLT [0x0]""")
 harddrive._backend_update()
 computer.set_filesystem(harddrive)
 computer.add_peripheral(terminalscreen)
