@@ -2901,7 +2901,7 @@ class Computer:
 
 class OperatingSystem:
 
-	"""The main operating system or OS the computer uses. System calls through interrupts can allow for memory and process management (heap and process memory), along with other things such as IO.
+	"""The main operating system or OS the computer uses. System calls through interrupts can allow for memory and process management (heap and process memory), along with other things such as IO (BIOS).
 	   The OS also handles files and process management with memory, ensuring that we don't run out. Finally, the OS can also switch into user mode, letting the user control everything."""
 
 	def __init__(self, computer, has_password=True):
@@ -3733,6 +3733,42 @@ class OperatingSystem:
 				# Shut down the computer
 				self.computer.shutdown()
 				exitcode = (0, None)
+			elif syscallid == 39:
+				# Set the password to be defined by RBX and RCX
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+				if exitcode != 0:
+					exitcode = (exitcode, None)
+				else:
+					# Set the password
+					self.computer.filesystem.password = hashlib.sha256(data).digest()
+					self.computer.filesystem._backend_update()
+					exitcode = (0, None)
+			elif syscallid == 40:
+				# Write to the processes STDOut with the beginning offset in RBX, and the end of the string indicated by a null byte
+				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+				# Get the data
+				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+				# Get each byte
+				i = begin_offset
+				data = ''
+				while True:
+					exitcode, byte = processmemory_use.get_bytes(i, 1)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
+						break
+					if byte == b'\x00':
+						exitcode = (0, None)
+						break
+					data += str(byte, ENCODING)
+					i += 1
+				
+				if exitcode[0] == 0:
+					# Write the data to the STDOut
+					exitcode = self.processes[pid].stdout.write(bytes(data, ENCODING), self.terminal)
 			else:
 				exitcode = (30, "Invalid SYSCall.")
 
@@ -3965,6 +4001,8 @@ class OperatingSystem:
 
 				if char == '\b':
 					# Backspace
+					if len(entered_password) == 0:
+						continue
 					entered_password = entered_password[ : -1]
 					self.terminal.print_terminal(b'\b')
 					continue
@@ -3985,16 +4023,52 @@ class OperatingSystem:
 				self.terminal.print_terminal(b'INCORRECT PASSWORD')
 				return (39, "Incorrect password.")
 
+		# Start the process main loop
+		self.process_mainloop()
+
+		# Run startup files
+		exitcode, data = self.computer.filesystem.read_file('/__startup.cbf')
+		if exitcode != 0:
+			# File cannot be loaded
+			pass
+		else:
+			# Try to run the file
+			process = self.run_executable_data(data)
+			exitcode, pid = self.process_create(process)
+			if exitcode == 0:
+				self.terminal.set_view(pid)
+				if exitcode == 0:
+					# Wait for the process to finish
+					self.process_await(pid)
+					self.terminal.remove_view()
+					# Terminate the process
+					self.process_delete(pid)			
+
 		# Try to start the command handler
 		if hasattr(self, 'cmdhandler'):
 			self.cmdhandler.start()
 
-		# Start the process main loop
-		self.process_mainloop()
-
 	def stop_os(self):
 
 		"""Stop the operating system."""
+
+		# Run shutdown files
+		exitcode, data = self.computer.filesystem.read_file('/__shutdown.cbf')
+		if exitcode != 0:
+			# File cannot be loaded
+			pass
+		else:
+			# Try to run the file
+			process = self.run_executable_data(data)
+			exitcode, pid = self.process_create(process)
+			if exitcode == 0:
+				self.terminal.set_view(pid)
+				if exitcode == 0:
+					# Wait for the process to finish
+					self.process_await(pid)
+					self.terminal.remove_view()
+					# Terminate the process
+					self.process_delete(pid)
 
 		# Kill all processes
 		for pid in self.processes:
@@ -4202,7 +4276,7 @@ class ProcessCMDHandler:
 			directory_list = self.computer.filesystem.list_directory(self.current_working_dir)
 			if directory_list[0] != 0:
 				return directory_list
-			directory_list = directory_list[1]
+			directory_list = directory_list[1].split('\n')
 			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list):
 				# Command is a file
 				# Get full main command name
@@ -4594,7 +4668,7 @@ class CMDHandler:
 			directory_list = self.computer.filesystem.list_directory(self.current_working_dir)
 			if directory_list[0] != 0:
 				return directory_list
-			directory_list = directory_list[1]
+			directory_list = directory_list[1].split('\n')
 			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list):
 				# Command is a file
 				# Get full main command name
@@ -4615,7 +4689,7 @@ class CMDHandler:
 				self.terminal.remove_view()
 				self.stealable = False
 				# Get the processes exitcode
-				exitcode = self.computer.operatingsystem.processes[pid].output[0]
+				exitcode, exitphrase = self.computer.operatingsystem.processes[pid].output
 				# Get the processes STDOut
 				stdout_data = self.computer.operatingsystem.processes[pid].stdout.data
 
@@ -4627,6 +4701,8 @@ class CMDHandler:
 				self.computer.operatingsystem.process_delete(pid)
 
 				# Return with the exitcode and STDOut data
+				if exitcode != 0:
+					return (exitcode, exitphrase)
 				return (exitcode, b'')
 
 			# Else, try to run a built-in command
@@ -4779,6 +4855,7 @@ class CMDHandler:
 
 			elif maincommand == 'shutdown':
 				# Shut down the computer
+				self.stealable = True
 				self.computer.shutdown()
 
 			elif maincommand == 'clear':
@@ -5689,7 +5766,7 @@ operatingsystem = OperatingSystem(computer)
 terminalscreen = TerminalScreen(computer)
 harddrive = FileSystem(computer, "test.fs")
 harddrive._backend_load()
-harddrive._format('Kevin2009')
+# harddrive._format('Kevin2009')
 # harddrive.filesystem = {'file.cbf' : bytearray(b'\xbc\x00\x00\x00\x00\x05\x03\x06\x0c&\x02\x06\x00folder\x00\x05\x01\x02\x04\x00\x06\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1f\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x10\x00folder/../folder\x00\x05\x01\x02\x04\x00\x10\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1a\x00\x00\x00$3\x00\x05\x03\x06\x0c&\x02\x08\x00test.txt\x00\x05\x01\x02\x04\x00\x08\x00\x00\x00\x00\x05\x0f\x06\x0c&\x02\n\x00test data!\x00\x05\x10\x02\x04\x00\n\x00\x00\x00\x00\x05\x00\x02\x04\x00\x1c\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x1b\x00\x00\x00$3\x00\x05\x00\x02\x04\x00\x01\x00\x00\x00\x00\x05\x01\x05\x03\x02\x06\x0c\x05\x03\x05\x03$3')}
 harddrive.write_file('code.cpu', b"""# Fibonacci Series
 

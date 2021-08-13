@@ -669,10 +669,16 @@ class Compiler:
 						# EMOS file system
 						if filename.startswith('/') or filename.startswith('\\'):
 							# Absolute path
-							filedata = str(self.emos.computer.filesystem.read_file(filename), ENCODING)
+							exitcode, filedata = self.emos.computer.filesystem.read_file(filename)
+							if exitcode != 0:
+								raise ParseError("Invalid path.")
+							filedata = str(filedata, ENCODING)
 						else:
 							# Relative path
-							filedata = str(self.emos.computer.filesystem.read_file(os.path.join(self.currentdir, filename)), ENCODING)
+							exitcode, filedata = self.emos.computer.filesystem.read_file(os.path.join(self.currentdir, filename))
+							if exitcode != 0:
+								raise ParseError("Invalid path.")
+							filedata = str(filedata, ENCODING)
 					# Eat the ending char
 					self.parse_through_whitespace_nonewline()
 					if self.next_char() != '>':
