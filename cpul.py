@@ -1,5 +1,10 @@
-"""32 Bit CPU and computer emulation in Python.
-Written by Kevin Chen."""
+"""
+
+- EMOS Main Source Code -
+
+(C) Cubeflix 2021 (EMOS)
+
+"""
 
 
 # Imports
