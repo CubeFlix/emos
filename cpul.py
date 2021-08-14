@@ -4325,9 +4325,18 @@ class ProcessCMDHandler:
 									return (31, "Cannot traverse back from root directory.")
 							else:
 								current.append(section)
-						self.current_working_dir = '/'.join(current)
+						# Check if the path is valid
+						newpath = '/'.join(current)
+						if self.computer.filesystem.list_directory(newpath)[0] == 0:
+							self.current_working_dir = newpath
+						else:
+							return (32, "Path is invalid.")
 					else:
-						self.current_working_dir = path
+						# Check if the path is valid
+						if self.computer.filesystem.list_directory(path)[0] == 0:
+							self.current_working_dir = path
+						else:
+							return (32, "Path is invalid.")
 					return (0, b'')
 				else:
 					# Get current working directory
@@ -4723,9 +4732,18 @@ class CMDHandler:
 									return (31, "Cannot traverse back from root directory.")
 							else:
 								current.append(section)
-						self.current_working_dir = '/'.join(current)
+						# Check if the path is valid
+						newpath = '/'.join(current)
+						if self.computer.filesystem.list_directory(newpath)[0] == 0:
+							self.current_working_dir = newpath
+						else:
+							return (32, "Path is invalid.")
 					else:
-						self.current_working_dir = path
+						# Check if the path is valid
+						if self.computer.filesystem.list_directory(path)[0] == 0:
+							self.current_working_dir = path
+						else:
+							return (32, "Path is invalid.")
 					return (0, b'')
 				else:
 					# Get current working directory
@@ -5186,8 +5204,23 @@ class TerminalScreen(Peripheral):
 		# Get a variable for the data
 		data = str(self.computer.memory.memorypartitions[('perp', self.pid)].data.replace(b'\x00', b''), ENCODING)
 
+		new_data = []
+
+		# Put in newlines if a line is too long
+		for line in data.split('\n'):
+			if len(line) > self.cols:
+				# Too many characters in the line
+				new_data.append(line[ : self.cols])
+				new_data.append(line[self.cols : ])
+			else:
+				# Else, just add the line
+				new_data.append(line)
+
+		# Join the new data
+		data = '\n'.join(new_data)
+
 		# Cut the data off if there are too many newlines
-		if data.count('\n') > self.rows:
+		if data.count('\n') + 1 > self.rows:
 			# Too many lines, so cut some off
 			split_data = data.split('\n')
 			new_data = []
