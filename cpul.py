@@ -862,6 +862,9 @@ class CPUCore:
 			return self.cpu.computer.memory.memorypartitions[('perp', memId)].set_data(newData)
 		elif desttype == 'pmem':
 			# Different processes memory destination
+			# Check the process security level
+			if self.cpu.computer.operatingsystem.processes[self.pname[1]].security_level == 1:
+				return (40, "Invalid process security level.")
 			memId = int.from_bytes(dest[1][0], byteorder='little')
 			memOffset = int.from_bytes(dest[1][1], byteorder='little')
 			memSize = int.from_bytes(dest[1][2], byteorder='little')
@@ -3341,26 +3344,30 @@ class OperatingSystem:
 					exitcode = (0, None)
 			elif syscallid == 4:
 				# Call a kernel panic
-				# Enter kernel terminal mode
-				self.terminal.kernel_mode()
-				# Get the error code in RBX
-				error_code = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				# Form the kernel data
-				data = ''
-				rows = self.computer.peripherals[self.terminalID].rows
-				cols = self.computer.peripherals[self.terminalID].cols
-				cent_text = ('KERNEL PANIC ERROR - ERROR CODE: ' + hex(error_code)).center(cols, '-')
-				text = ('-' * cols + '\n') * (rows // 2) + cent_text + ('-' * cols + '\n') * (rows // 2 - 1)
-				# Write to the kernel data
-				self.kernel_stdout.write(bytes(text, ENCODING), self.terminal)
-				# Kill all processes
-				for process in self.processes:
-					for thread in self.processes[process].threads:
-						self.halt_thread(process, thread, 26) # Error code 26 (kernel panic)
-					self.process_terminate(process)
-				# Enter the infinite loop
-				exitcode = (0, None)
-				while True: pass
+				# Check the process security level
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Enter kernel terminal mode
+					self.terminal.kernel_mode()
+					# Get the error code in RBX
+					error_code = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					# Form the kernel data
+					data = ''
+					rows = self.computer.peripherals[self.terminalID].rows
+					cols = self.computer.peripherals[self.terminalID].cols
+					cent_text = ('KERNEL PANIC ERROR - ERROR CODE: ' + hex(error_code)).center(cols, '-')
+					text = ('-' * cols + '\n') * (rows // 2) + cent_text + ('-' * cols + '\n') * (rows // 2 - 1)
+					# Write to the kernel data
+					self.kernel_stdout.write(bytes(text, ENCODING), self.terminal)
+					# Kill all processes
+					for process in self.processes:
+						for thread in self.processes[process].threads:
+							self.halt_thread(process, thread, 26) # Error code 26 (kernel panic)
+						self.process_terminate(process)
+					# Enter the infinite loop
+					exitcode = (0, None)
+					while True: pass
 			elif syscallid == 5:
 				# Fork the current process
 				exitcode = self.process_fork(pid)
@@ -3390,61 +3397,79 @@ class OperatingSystem:
 				self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(tid, 4, byteorder='little')
 				exitcode = (0, None)
 			elif syscallid == 9:
-				# Kill a process with PID in RBX and exitcode in RCX
-				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				exitcode = self.process_terminate(s_pid)
-				self.processes[s_pid].output = (0, s_exitcode)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Kill a process with PID in RBX and exitcode in RCX
+					s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					exitcode = self.process_terminate(s_pid)
+					self.processes[s_pid].output = (0, s_exitcode)
 			elif syscallid == 10:
-				# Kill a thread with PID in RBX, TID in RCX, and exitcode in RDI
-				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RDI'].get_bytes(0, 4)[1], byteorder='little')
-				exitcode = self.halt_thread(s_pid, s_tid, s_exitcode)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Kill a thread with PID in RBX, TID in RCX, and exitcode in RDI
+					s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					s_exitcode = int.from_bytes(self.processes[pid].threads[tid].registers['RDI'].get_bytes(0, 4)[1], byteorder='little')
+					exitcode = self.halt_thread(s_pid, s_tid, s_exitcode)
 			elif syscallid == 11:
-				# Delete a process from the records with the PID in RBX
-				# Get the PID from RBX
-				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				exitcode = self.process_delete(s_pid)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Delete a process from the records with the PID in RBX
+					# Get the PID from RBX
+					s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					exitcode = self.process_delete(s_pid)
 			elif syscallid == 12:
-				# Delete a thread from the records with the PID in RBX and the TID RCX
-				# Get the PID from RBX
-				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the TID from RCX
-				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				exitcode = self.thread_delete(s_pid, s_tid)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Delete a thread from the records with the PID in RBX and the TID RCX
+					# Get the PID from RBX
+					s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the TID from RCX
+					s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					exitcode = self.thread_delete(s_pid, s_tid)
 			elif syscallid == 13:
-				# Import a system dynamic library to the current thread, putting the ID into RBX
-				# Get the LID (library ID) from RBX
-				s_lid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				# Find the LID
-				if s_lid < len(self.syslibs):
-					# Import the library
-					self.processes[pid].threads[tid].dynamic_libraries.append(self.syslibs[s_lid](self, pid, tid))
-					# Put the LID into RBX
-					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(self.processes[pid].threads[tid].dynamic_libraries) - 1, 4, byteorder='little')
-					exitcode = (0, None)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
 				else:
-					# Invalid LID
-					exitcode = (27, "Library ID is invalid.")
-			elif syscallid == 14:
-				# Call an imported dynamic library, with the LID in RBX and the call ID in RCX
-				# Get the LID and call ID
-				s_lid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				s_call = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Call the library
-				if s_lid < len(self.processes[pid].threads[tid].dynamic_libraries):
-					# Get the library
-					lib = self.processes[pid].threads[tid].dynamic_libraries[s_lid]
-					if s_call in lib.defined_calls:
-						# Call the library
-						exitcode = self.processes[pid].threads[tid].dynamic_libraries[s_lid].handle(s_call)
+					# Import a system dynamic library to the current thread, putting the ID into RBX
+					# Get the LID (library ID) from RBX
+					s_lid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					# Find the LID
+					if s_lid < len(self.syslibs):
+						# Import the library
+						self.processes[pid].threads[tid].dynamic_libraries.append(self.syslibs[s_lid](self, pid, tid))
+						# Put the LID into RBX
+						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(self.processes[pid].threads[tid].dynamic_libraries) - 1, 4, byteorder='little')
+						exitcode = (0, None)
 					else:
-						# Invalid call ID
-						exitcode = (28, "Call ID is invalid.")
+						# Invalid LID
+						exitcode = (27, "Library ID is invalid.")
+			elif syscallid == 14:
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
 				else:
-					# Invalid LID
-					exitcode = (27, "Library ID is invalid.")
+					# Call an imported dynamic library, with the LID in RBX and the call ID in RCX
+					# Get the LID and call ID
+					s_lid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					s_call = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Call the library
+					if s_lid < len(self.processes[pid].threads[tid].dynamic_libraries):
+						# Get the library
+						lib = self.processes[pid].threads[tid].dynamic_libraries[s_lid]
+						if s_call in lib.defined_calls:
+							# Call the library
+							exitcode = self.processes[pid].threads[tid].dynamic_libraries[s_lid].handle(s_call)
+						else:
+							# Invalid call ID
+							exitcode = (28, "Call ID is invalid.")
+					else:
+						# Invalid LID
+						exitcode = (27, "Library ID is invalid.")
 			elif syscallid == 15:
 				# Allocate heap memory, putting the ID in RBX
 				exitcode = self.allocate_memory()
@@ -3478,26 +3503,35 @@ class OperatingSystem:
 				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
 				exitcode = self.thread_await(s_pid, s_tid)
 			elif syscallid == 21:
-				# Create a process with the size of the code section in RBX and the size of the data section in RCX, putting the PID into RBX
-				s_code = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				s_data = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Create the process object
-				s_thread = PThread(0, MemorySection('stack', 0, b''), None)
-				s_process = Process(ProcessMemory(bytes(s_code), bytes(s_data), b''), {0 : s_thread}, 't')
-				# Create the process
-				exitcode = self.process_create(s_process)
-				if exitcode[0] == 0:
-					# Successful process creation
-					self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(s_length, 4, byteorder='little')
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Create a process with the size of the code section in RBX and the size of the data section in RCX, putting the PID into RBX
+					s_code = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					s_data = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Create the process object
+					s_thread = PThread(0, MemorySection('stack', 0, b''), None)
+					s_process = Process(ProcessMemory(bytes(s_code), bytes(s_data), b''), {0 : s_thread}, 't')
+					# Create the process
+					exitcode = self.process_create(s_process)
+					if exitcode[0] == 0:
+						# Successful process creation
+						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(s_length, 4, byteorder='little')
 			elif syscallid == 22:
-				# Resume a process with the PID in RBX
-				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				exitcode = self.process_resume(s_pid)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Resume a process with the PID in RBX
+					s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					exitcode = self.process_resume(s_pid)
 			elif syscallid == 23:
-				# Resume a thread with the PID in RBX and TID in RCX
-				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				exitcode = self.thread_resume(s_pid, s_tid)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Resume a thread with the PID in RBX and TID in RCX
+					s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					s_tid = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					exitcode = self.thread_resume(s_pid, s_tid)
 			elif syscallid == 24:
 				# Get a processes exit code with the PID in RBX putting the exitcode into RBX
 				s_pid = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
@@ -3570,112 +3604,127 @@ class OperatingSystem:
 						self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
 						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(exitcode[1]), 4, byteorder="little")
 			elif syscallid == 28:
-				# Write to a file from the process memory given by R9 and R10, with the filename given by RBX and RCX
-				begin_offset_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				begin_offset_data = int.from_bytes(self.processes[pid].threads[tid].registers['R9'].get_bytes(0, 4)[1], byteorder='little')
-				length_data = int.from_bytes(self.processes[pid].threads[tid].registers['R10'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the data
-				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-				exitcode, data = processmemory_use.get_bytes(begin_offset_data, length_data)
-				if exitcode != 0:
-					exitcode = (exitcode, None)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
 				else:
+					# Write to a file from the process memory given by R9 and R10, with the filename given by RBX and RCX
+					begin_offset_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					begin_offset_data = int.from_bytes(self.processes[pid].threads[tid].registers['R9'].get_bytes(0, 4)[1], byteorder='little')
+					length_data = int.from_bytes(self.processes[pid].threads[tid].registers['R10'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the data
+					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+					exitcode, data = processmemory_use.get_bytes(begin_offset_data, length_data)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
+					else:
+						exitcode, filename = processmemory_use.get_bytes(begin_offset_filename, length_filename)
+						if exitcode != 0:
+							exitcode = (exitcode, None)
+						else:
+							# Write to the file
+							path = str(filename, ENCODING)
+							if path.startswith('/') or path.startswith('\\'):
+								# Absolute path
+								fullpath = path
+							else:
+								# Relative path
+								fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+							exitcode = self.computer.filesystem.write_file(fullpath, data)
+			elif syscallid == 29:
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Delete a file with the path given by RBX and RCX
+					begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the data
+					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+					exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
+					else:
+						# Delete the file
+						path = str(data, ENCODING)
+						if path.startswith('/') or path.startswith('\\'):
+							# Absolute path
+							fullpath = path
+						else:
+							# Relative path
+							fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+						exitcode = self.computer.filesystem.delete_file(fullpath)
+			elif syscallid == 30:
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Rename a file with the path given by RBX and RCX, with the new name given by R9 and R10
+					begin_offset_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					begin_offset_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the data
+					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
 					exitcode, filename = processmemory_use.get_bytes(begin_offset_filename, length_filename)
 					if exitcode != 0:
 						exitcode = (exitcode, None)
 					else:
-						# Write to the file
-						path = str(filename, ENCODING)
-						if path.startswith('/') or path.startswith('\\'):
-							# Absolute path
-							fullpath = path
+						exitcode, newname = processmemory_use.get_bytes(begin_offset_newname, length_newname)
+						if exitcode != 0:
+							exitcode = (exitcode, None)
 						else:
-							# Relative path
-							fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
-						exitcode = self.computer.filesystem.write_file(fullpath, data)
-			elif syscallid == 29:
-				# Delete a file with the path given by RBX and RCX
-				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the data
-				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
-				if exitcode != 0:
-					exitcode = (exitcode, None)
+							# Rename the file
+							path = str(filename, ENCODING)
+							if path.startswith('/') or path.startswith('\\'):
+								# Absolute path
+								fullpath = path
+							else:
+								# Relative path
+								fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+							exitcode = self.computer.filesystem.rename_file(fullpath, str(newname, ENCODING))
+			elif syscallid == 31:
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
 				else:
-					# Delete the file
-					path = str(data, ENCODING)
-					if path.startswith('/') or path.startswith('\\'):
-						# Absolute path
-						fullpath = path
-					else:
-						# Relative path
-						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
-					exitcode = self.computer.filesystem.delete_file(fullpath)
-			elif syscallid == 30:
-				# Rename a file with the path given by RBX and RCX, with the new name given by R9 and R10
-				begin_offset_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				begin_offset_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the data
-				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-				exitcode, filename = processmemory_use.get_bytes(begin_offset_filename, length_filename)
-				if exitcode != 0:
-					exitcode = (exitcode, None)
-				else:
-					exitcode, newname = processmemory_use.get_bytes(begin_offset_newname, length_newname)
+					# Create a folder with the path given by RBX and RCX
+					begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the data
+					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+					exitcode, foldername = processmemory_use.get_bytes(begin_offset, length)
 					if exitcode != 0:
 						exitcode = (exitcode, None)
 					else:
-						# Rename the file
-						path = str(filename, ENCODING)
+						# Create the folder
+						path = str(foldername, ENCODING)
 						if path.startswith('/') or path.startswith('\\'):
 							# Absolute path
 							fullpath = path
 						else:
 							# Relative path
 							fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
-						exitcode = self.computer.filesystem.rename_file(fullpath, str(newname, ENCODING))
-			elif syscallid == 31:
-				# Create a folder with the path given by RBX and RCX
-				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the data
-				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-				exitcode, foldername = processmemory_use.get_bytes(begin_offset, length)
-				if exitcode != 0:
-					exitcode = (exitcode, None)
-				else:
-					# Create the folder
-					path = str(foldername, ENCODING)
-					if path.startswith('/') or path.startswith('\\'):
-						# Absolute path
-						fullpath = path
-					else:
-						# Relative path
-						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
-					exitcode = self.computer.filesystem.create_directory(fullpath)
+						exitcode = self.computer.filesystem.create_directory(fullpath)
 			elif syscallid == 32:
-				# Delete a folder with the path given by RBX and RCX
-				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the data
-				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-				exitcode, foldername = processmemory_use.get_bytes(begin_offset, length)
-				if exitcode != 0:
-					exitcode = (exitcode, None)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
 				else:
-					# Delete the folder
-					path = str(foldername, ENCODING)
-					if path.startswith('/') or path.startswith('\\'):
-						# Absolute path
-						fullpath = path
+					# Delete a folder with the path given by RBX and RCX
+					begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the data
+					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+					exitcode, foldername = processmemory_use.get_bytes(begin_offset, length)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
 					else:
-						# Relative path
-						fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
-					exitcode = self.computer.filesystem.delete_directory(fullpath)
+						# Delete the folder
+						path = str(foldername, ENCODING)
+						if path.startswith('/') or path.startswith('\\'):
+							# Absolute path
+							fullpath = path
+						else:
+							# Relative path
+							fullpath = os.path.join(self.processes[pid].cmdhandler.current_working_dir, path)
+						exitcode = self.computer.filesystem.delete_directory(fullpath)
 			elif syscallid == 33:
 				# Return a list of the filenames in the directory given by RBX and RCX, separated by newlines and put it into the stack along with the length in RBX
 				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
@@ -3702,20 +3751,23 @@ class OperatingSystem:
 						self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
 						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(exitcode[1]), 4, byteorder="little")
 			elif syscallid == 34:
-				# Run a command defined by RBX and RCX on the command line
-				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the data
-				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
-				if exitcode != 0:
-					exitcode = (exitcode, None)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
 				else:
-					# Run the command
-					command = str(data, ENCODING)
-					exitcode = self.processes[pid].cmdhandler.handle(command)
-					if exitcode[0] == 0:
-						exitcode = (0, None)
+					# Run a command defined by RBX and RCX on the command line
+					begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the data
+					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+					exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
+					else:
+						# Run the command
+						command = str(data, ENCODING)
+						exitcode = self.processes[pid].cmdhandler.handle(command)
+						if exitcode[0] == 0:
+							exitcode = (0, None)
 			elif syscallid == 35:
 				# Get the current working directory and put it into stack with the length in RBX
 				data = self.processes[pid].cmdhandler.current_working_dir
@@ -3726,32 +3778,41 @@ class OperatingSystem:
 				self.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.processes[pid].threads[tid].stack.data) + self.processes[pid].processmemory.ss, 4, byteorder='little')
 				exitcode = (0, None)
 			elif syscallid == 36:
-				# Format the FileSystem
-				self.computer.filesystem._format()
-				exitcode = (0, None)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Format the FileSystem
+					self.computer.filesystem._format()
+					exitcode = (0, None)
 			elif syscallid == 37:
 				# Get the current time as a 8 byte integer and put it into RBX
 				t = int.to_bytes(int(time.time()), 8, byteorder='little')
 				self.processes[pid].threads[tid].registers['RBX'].data[0 : 8] = t
 				exitcode = (0, None)
 			elif syscallid == 38:
-				# Shut down the computer
-				self.computer.shutdown()
-				exitcode = (0, None)
-			elif syscallid == 39:
-				# Set the password to be defined by RBX and RCX
-				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-				# Get the data
-				processmemory_use = self.processes[pid].get_processmemory_thread(tid)
-				exitcode, data = processmemory_use.get_bytes(begin_offset, length)
-				if exitcode != 0:
-					exitcode = (exitcode, None)
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
 				else:
-					# Set the password
-					self.computer.filesystem.password = hashlib.sha256(data).digest()
-					self.computer.filesystem._backend_update()
+					# Shut down the computer
+					self.computer.shutdown()
 					exitcode = (0, None)
+			elif syscallid == 39:
+				if self.processes[pid].security_level == 1:
+					exitcode = (40, "Invalid process security level.")
+				else:
+					# Set the password to be defined by RBX and RCX
+					begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
+					length = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					# Get the data
+					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
+					exitcode, data = processmemory_use.get_bytes(begin_offset, length)
+					if exitcode != 0:
+						exitcode = (exitcode, None)
+					else:
+						# Set the password
+						self.computer.filesystem.password = hashlib.sha256(data).digest()
+						self.computer.filesystem._backend_update()
+						exitcode = (0, None)
 			elif syscallid == 40:
 				# Write to the processes STDOut with the beginning offset in RBX, and the end of the string indicated by a null byte
 				begin_offset = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
@@ -4290,6 +4351,7 @@ class ProcessCMDHandler:
 				if file_data[0] != 0:
 					return file_data
 				process = self.computer.operatingsystem.run_executable_data(file_data[1])
+				process.security_level = self.security_level
 				process.stdin.data = bytearray(b' '.join([bytes(i, ENCODING) for i in args]))
 				exitcode, pid = self.computer.operatingsystem.process_create(process)
 				if exitcode != 0:
@@ -4390,7 +4452,7 @@ class ProcessCMDHandler:
 
 				# Delete the path
 				if self.computer.filesystem.delete_file(fullpath)[0] != 0:
-					return self.computer.filesystem.delete_directory(fullpath)
+					return (self.computer.filesystem.delete_directory(fullpath)[0], b'')
 				else:
 					return (0, b'')
 
@@ -4523,6 +4585,10 @@ class ProcessCMDHandler:
 
 				return (0, b'')
 
+			elif maincommand == 'sec':
+				# Set the security level
+				self.security_level = int(args[0])
+
 			return (36, "Illegal command.")
 
 		except Exception as e:
@@ -4582,12 +4648,14 @@ class CMDHandler:
 		'help' : 'Get help.'
 	}
 
-	def __init__(self, current_working_dir):
+	def __init__(self, current_working_dir, security_level=0):
 
 		"""Create the command handler.
 		   Args: current_working_dir -> the current working directory for the command handler"""
 
 		self.current_working_dir = current_working_dir
+
+		self.security_level = security_level
 
 	def initialize(self, computer):
 
@@ -4691,6 +4759,7 @@ class CMDHandler:
 				if file_data[0] != 0:
 					return file_data
 				process = self.computer.operatingsystem.run_executable_data(file_data[1])
+				process.security_level = self.security_level
 				process.stdin.data = bytearray(b' '.join([bytes(i, ENCODING) for i in args]))
 				self.stealable = True
 				exitcode, pid = self.computer.operatingsystem.process_create(process)
@@ -4798,7 +4867,7 @@ class CMDHandler:
 
 				# Delete the path
 				if self.computer.filesystem.delete_file(fullpath)[0] != 0:
-					return self.computer.filesystem.delete_directory(fullpath)
+					return (self.computer.filesystem.delete_directory(fullpath)[0], b'')
 				else:
 					return (0, b'')
 
@@ -4977,6 +5046,12 @@ class CMDHandler:
 
 				return (0, b'')
 
+			elif maincommand == 'sec':
+				# Set the security level
+				self.security_level = int(args[0])
+
+				return (0, b'')
+
 			return (36, "Illegal command.")
 
 		except Exception as e:
@@ -5019,12 +5094,13 @@ class Process:
 
 	"""The main process object."""
 
-	def __init__(self, processmemory, threads, state):
+	def __init__(self, processmemory, threads, state, security_level=0):
 
 		"""Create the process.
 		   Args: processmemory -> the process memory for the process
 		         threads -> a dictionary containing all the thread ids and the threads
-		         state -> string containing the state of the process. 'r' for running, or 't' for terminated/stopped/error"""
+		         state -> string containing the state of the process. 'r' for running, or 't' for terminated/stopped/error
+		         secutiry_level -> the security level which the process is at. 0 for full access, and 1 for limited access"""
 
 		self.processmemory = processmemory
 		self.threads = threads
@@ -5036,6 +5112,8 @@ class Process:
 		self.open_files = []
 
 		self.cmdhandler = ProcessCMDHandler('')
+
+		self.security_level = security_level
 
 	def get_processmemory_thread(self, tid):
 
