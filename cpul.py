@@ -22,7 +22,7 @@ import hashlib
 MAXPROCESSMEMORY = 2 ** 32 - 1
 MAXMEMORY = 2 ** 32 - 1
 ENCODING = 'utf-8'
-INVALID_FILENAME_CHARS = ['\n', '\b', '\t', '\r']
+INVALID_FILENAME_CHARS = ['\n', '\b', '\t', '\r', '"', '\'']
 
 
 class Exit(Exception):
@@ -2623,6 +2623,9 @@ class FileSystem:
 		# Check the final file
 		if not type(traversal_history[-1]) in (bytes, bytearray):
 			return (32, "Path is invalid.")
+		# Check for environment file
+		if split_path[-1] == '__enviro':
+			return (41, "Cannot delete environment file.")
 		# Delete the file using the second to last reference in the traversal history
 		del traversal_history[-2][split_path[-1]]
 		# Update
@@ -2656,6 +2659,9 @@ class FileSystem:
 				return (32, "Path is invalid.")
 		# Allow folders and files
 		# Rename the file using the second to last reference in the traversal history
+		# Check for environment file
+		if split_path[-1] == '__enviro':
+			return (41, "Cannot delete environment file.")
 		traversal_history[-2][new_name] = traversal_history[-2].pop(split_path[-1])
 		# Update
 		self._backend_update()
@@ -2724,7 +2730,10 @@ class FileSystem:
 		if not type(traversal_history[-1]) == dict:
 			return (32, "Path is invalid.")
 		# Delete the folder using the second to last reference in the traversal history
-		del traversal_history[-2][split_path[-1]]
+		try:
+			del traversal_history[-2][split_path[-1]]
+		except Exception as e:
+			return (32, "Path is invalid.")
 		# Update
 		self._backend_update()
 		return (0, None)
@@ -2777,6 +2786,9 @@ class FileSystem:
 		self.filesystem, self.password = pickle.loads(f.read())
 		f.close()
 
+		if not '__enviro' in self.filesystem:
+			self.filesystem['__enviro'] = b''
+
 	def _backend_update(self):
 
 		"""Update the virtual hard drive file."""
@@ -2789,7 +2801,7 @@ class FileSystem:
 
 		"""Format the hard drive."""
 
-		self.filesystem = {}
+		self.filesystem = {'__enviro' : b''}
 		self.password = hashlib.sha256(bytes(password, ENCODING)).digest()
 		self._backend_update()
 
@@ -3271,6 +3283,9 @@ class OperatingSystem:
 		self.processes[pid].threads[tid].output = (exitcode, None)
 		e_exitcode = self.processes[pid].threads[tid].stack.set_data(self.processes[pid].threads[tid].stack.data + int.to_bytes(exitcode, 2, byteorder='little'))
 		self.processes[pid].threads[tid].running = False
+		if exitcode != 0:
+			self.processes[pid].start = 't'
+			self.processes[pid].output = (exitcode, None)
 		if not all([self.processes[pid].threads[t].running for t in self.processes[pid].threads]):
 			# All threads are done
 			self.processes[pid].state = 't'
@@ -3835,6 +3850,15 @@ class OperatingSystem:
 				if exitcode[0] == 0:
 					# Write the data to the STDOut
 					exitcode = self.processes[pid].stdout.write(bytes(data, ENCODING), self.terminal)
+			elif syscallid == 41:
+				# Read an environment variable
+				exitcode = (0, None)
+			elif syscallid == 42:
+				# Write to an environment variable
+				exitcode = (0, None)
+			elif syscallid == 43:
+				# Delete an environment variable
+				exitcode = (0, None)
 			else:
 				exitcode = (30, "Invalid SYSCall.")
 
@@ -4451,10 +4475,11 @@ class ProcessCMDHandler:
 					fullpath = os.path.join(self.current_working_dir, args[0])
 
 				# Delete the path
-				if self.computer.filesystem.delete_file(fullpath)[0] != 0:
+				exitcode, exitphrase = self.computer.filesystem.delete_file(fullpath)
+				if exitcode == 32:
 					return (self.computer.filesystem.delete_directory(fullpath)[0], b'')
 				else:
-					return (0, b'')
+					return (exitcode, b'')
 
 			elif maincommand == 'rname':
 				# Rename a file or folder
@@ -4588,6 +4613,33 @@ class ProcessCMDHandler:
 			elif maincommand == 'sec':
 				# Set the security level
 				self.security_level = int(args[0])
+
+			elif maincommand == 'copy':
+				# Copy a file to a different file
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+					
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				filedata = exitcode[1]
+
+				# Write to the second file
+				if args[1].startswith('/') or args[1].startswith('\\'):
+					# Absolute
+					fullpath = args[1]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[1])
+					
+				# Write to the file
+				return (self.computer.filesystem.write_file(fullpath, filedata)[0], b'')
 
 			return (36, "Illegal command.")
 
@@ -4866,10 +4918,11 @@ class CMDHandler:
 					fullpath = os.path.join(self.current_working_dir, args[0])
 
 				# Delete the path
-				if self.computer.filesystem.delete_file(fullpath)[0] != 0:
+				exitcode, exitphrase = self.computer.filesystem.delete_file(fullpath)
+				if exitcode == 32:
 					return (self.computer.filesystem.delete_directory(fullpath)[0], b'')
 				else:
-					return (0, b'')
+					return (exitcode, b'')
 
 			elif maincommand == 'rname':
 				# Rename a file or folder
@@ -5051,6 +5104,33 @@ class CMDHandler:
 				self.security_level = int(args[0])
 
 				return (0, b'')
+
+			elif maincommand == 'copy':
+				# Copy a file to a different file
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+					
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				filedata = exitcode[1]
+
+				# Write to the second file
+				if args[1].startswith('/') or args[1].startswith('\\'):
+					# Absolute
+					fullpath = args[1]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[1])
+					
+				# Write to the file
+				return (self.computer.filesystem.write_file(fullpath, filedata)[0], b'')
 
 			return (36, "Illegal command.")
 
