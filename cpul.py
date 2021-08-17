@@ -16,6 +16,7 @@ import shlex
 import os, sys
 import parse
 import hashlib
+import json
 
 
 # Constants
@@ -2787,7 +2788,9 @@ class FileSystem:
 		f.close()
 
 		if not '__enviro' in self.filesystem:
-			self.filesystem['__enviro'] = b''
+			self.filesystem['__enviro'] = b'{}'
+
+		self._backend_update()
 
 	def _backend_update(self):
 
@@ -2801,7 +2804,7 @@ class FileSystem:
 
 		"""Format the hard drive."""
 
-		self.filesystem = {'__enviro' : b''}
+		self.filesystem = {'__enviro' : b'{}'}
 		self.password = hashlib.sha256(bytes(password, ENCODING)).digest()
 		self._backend_update()
 
@@ -3675,8 +3678,8 @@ class OperatingSystem:
 					# Rename a file with the path given by RBX and RCX, with the new name given by R9 and R10
 					begin_offset_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
 					length_filename = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
-					begin_offset_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-					length_newname = int.from_bytes(self.processes[pid].threads[tid].registers['RCX'].get_bytes(0, 4)[1], byteorder='little')
+					begin_offset_newname = int.from_bytes(self.processes[pid].threads[tid].registers['R9'].get_bytes(0, 4)[1], byteorder='little')
+					length_newname = int.from_bytes(self.processes[pid].threads[tid].registers['R10'].get_bytes(0, 4)[1], byteorder='little')
 					# Get the data
 					processmemory_use = self.processes[pid].get_processmemory_thread(tid)
 					exitcode, filename = processmemory_use.get_bytes(begin_offset_filename, length_filename)
@@ -3850,15 +3853,6 @@ class OperatingSystem:
 				if exitcode[0] == 0:
 					# Write the data to the STDOut
 					exitcode = self.processes[pid].stdout.write(bytes(data, ENCODING), self.terminal)
-			elif syscallid == 41:
-				# Read an environment variable
-				exitcode = (0, None)
-			elif syscallid == 42:
-				# Write to an environment variable
-				exitcode = (0, None)
-			elif syscallid == 43:
-				# Delete an environment variable
-				exitcode = (0, None)
 			else:
 				exitcode = (30, "Invalid SYSCall.")
 
@@ -4359,24 +4353,41 @@ class ProcessCMDHandler:
 				# Output should be a copy of the now terminated process
 				args += shlex.split(str(stdout_data, ENCODING))
 
+			enviro_dict = json.loads(str(self.computer.filesystem.read_file('./__enviro')[1], ENCODING))
+
+			for i, arg in enumerate(args):
+				if arg.startswith('%') and arg.endswith('%'):
+					# Environment variable
+					if arg[1 : -1] in enviro_dict:
+						# Environment variable exists
+						args[i] = enviro_dict[arg[1 : -1]]
+
 			# Run the final command
 			# Check if the command is a file
-			# FUTURE TODO: Environment Variables
 			directory_list = self.computer.filesystem.list_directory(self.current_working_dir)
 			if directory_list[0] != 0:
 				return directory_list
 			directory_list = directory_list[1].split('\n')
-			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list):
+			if 'PATH' in enviro_dict:
+				enviro_path_list = shlex.split(enviro_dict['PATH'])
+				for i in enviro_path_list:
+					if i.endswith(maincommand + '.cbf') or i.endswith(maincommand):
+						# Command is in environment variables
+						maincommand = i
+						break
+
+			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list) or (self.computer.filesystem.read_file(maincommand if maincommand.startswith('/') or maincommand.startswith('\\') else os.path.join(self.current_working_dir, maincommand))[0] == 0):
 				# Command is a file
 				# Get full main command name
 				maincommand = maincommand if maincommand.endswith('.cbf') else (maincommand + '.cbf')
 				# Create the process
-				file_data = self.computer.filesystem.read_file(os.path.join(self.current_working_dir, maincommand))
+				file_data = self.computer.filesystem.read_file(maincommand if maincommand.startswith('/') or maincommand.startswith('\\') else os.path.join(self.current_working_dir, maincommand))
 				if file_data[0] != 0:
 					return file_data
 				process = self.computer.operatingsystem.run_executable_data(file_data[1])
 				process.security_level = self.security_level
 				process.stdin.data = bytearray(b' '.join([bytes(i, ENCODING) for i in args]))
+				process.cmdhandler.current_working_dir = self.current_working_dir
 				exitcode, pid = self.computer.operatingsystem.process_create(process)
 				if exitcode != 0:
 					return (exitcode, pid)
@@ -4641,6 +4652,37 @@ class ProcessCMDHandler:
 				# Write to the file
 				return (self.computer.filesystem.write_file(fullpath, filedata)[0], b'')
 
+			elif maincommand == 'env':
+				# Modify or get environment variables
+				env_command = args.pop(0)
+
+				env_data = json.loads(str(self.computer.filesystem.read_file('./__enviro')[1], ENCODING))
+
+				if env_command == 'get':
+					# Get an environment variable
+					if args[0] not in env_data:
+						return (42, "Invalid environment variable name.")
+					data = env_data[args[0]]
+
+					if pipetofile:
+						return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if not (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
+					return (0, bytes(data, ENCODING))
+				elif env_command == 'set':
+					# Set an environment variable+
+					var_name = args.pop(0)
+					# Get the data
+					data = ' '.join(args)
+					# Put the data into the environment file
+					env_data[var_name] = data
+					# Write the file back
+					return (self.computer.filesystem.write_file('./__enviro', bytes(json.dumps(env_data), ENCODING))[0], b'')
+				elif env_command == 'del':
+					# Delete an environment variable
+					var_name = args.pop(0)
+					del env_data[var_name]
+					# Write the file back
+					return (self.computer.filesystem.write_file('./__enviro', bytes(json.dumps(env_data), ENCODING))[0], b'')
+
 			return (36, "Illegal command.")
 
 		except Exception as e:
@@ -4795,24 +4837,41 @@ class CMDHandler:
 				# Output should be a copy of the now terminated process
 				args += shlex.split(str(stdout_data, ENCODING))
 
+			enviro_dict = json.loads(str(self.computer.filesystem.read_file('./__enviro')[1], ENCODING))
+
+			for i, arg in enumerate(args):
+				if arg.startswith('%') and arg.endswith('%'):
+					# Environment variable
+					if arg[1 : -1] in enviro_dict:
+						# Environment variable exists
+						args[i] = enviro_dict[arg[1 : -1]]
+
 			# Run the final command
 			# Check if the command is a file
-			# FUTURE TODO: Environment Variables
 			directory_list = self.computer.filesystem.list_directory(self.current_working_dir)
 			if directory_list[0] != 0:
 				return directory_list
 			directory_list = directory_list[1].split('\n')
-			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list):
+			if 'PATH' in enviro_dict:
+				enviro_path_list = shlex.split(enviro_dict['PATH'])
+				for i in enviro_path_list:
+					if i.endswith(maincommand + '.cbf') or i.endswith(maincommand):
+						# Command is in environment variables
+						maincommand = i
+						break
+
+			if (maincommand in directory_list) or (maincommand + '.cbf' in directory_list) or (self.computer.filesystem.read_file(maincommand if maincommand.startswith('/') or maincommand.startswith('\\') else os.path.join(self.current_working_dir, maincommand))[0] == 0):
 				# Command is a file
 				# Get full main command name
 				maincommand = maincommand if maincommand.endswith('.cbf') else (maincommand + '.cbf')
 				# Create the process
-				file_data = self.computer.filesystem.read_file(os.path.join(self.current_working_dir, maincommand))
+				file_data = self.computer.filesystem.read_file(maincommand if maincommand.startswith('/') or maincommand.startswith('\\') else os.path.join(self.current_working_dir, maincommand))
 				if file_data[0] != 0:
 					return file_data
 				process = self.computer.operatingsystem.run_executable_data(file_data[1])
 				process.security_level = self.security_level
 				process.stdin.data = bytearray(b' '.join([bytes(i, ENCODING) for i in args]))
+				process.cmdhandler.current_working_dir = self.current_working_dir
 				self.stealable = True
 				exitcode, pid = self.computer.operatingsystem.process_create(process)
 				self.terminal.set_view(pid)
@@ -5131,6 +5190,37 @@ class CMDHandler:
 					
 				# Write to the file
 				return (self.computer.filesystem.write_file(fullpath, filedata)[0], b'')
+
+			elif maincommand == 'env':
+				# Modify or get environment variables
+				env_command = args.pop(0)
+
+				env_data = json.loads(str(self.computer.filesystem.read_file('./__enviro')[1], ENCODING))
+
+				if env_command == 'get':
+					# Get an environment variable
+					if args[0] not in env_data:
+						return (42, "Invalid environment variable name.")
+					data = env_data[args[0]]
+
+					if pipetofile:
+						return (self.computer.filesystem.write_file(os.path.join(self.current_working_dir, pipetofile[0]) if not (pipetofile[0].startswith('/') or pipetofile[0].startswith('\\')) else pipetofile[0], bytes(data, ENCODING))[0], bytes(data, ENCODING))
+					return (0, bytes(data, ENCODING))
+				elif env_command == 'set':
+					# Set an environment variable
+					var_name = args.pop(0)
+					# Get the data
+					data = ' '.join(args)
+					# Put the data into the environment file
+					env_data[var_name] = data
+					# Write the file back
+					return (self.computer.filesystem.write_file('./__enviro', bytes(json.dumps(env_data), ENCODING))[0], b'')
+				elif env_command == 'del':
+					# Delete an environment variable
+					var_name = args.pop(0)
+					del env_data[var_name]
+					# Write the file back
+					return (self.computer.filesystem.write_file('./__enviro', bytes(json.dumps(env_data), ENCODING))[0], b'')
 
 			return (36, "Illegal command.")
 
