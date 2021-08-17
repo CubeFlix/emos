@@ -1,3 +1,6 @@
+# Hexview Main Source Code
+# (C) Cubeflix 2021 (HEXVIEW)
+
 [.data]
 # Hexadecimal digit character list
 [charlist] ["0123456789ABCDEF"]
