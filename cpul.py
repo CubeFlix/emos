@@ -4683,6 +4683,38 @@ class ProcessCMDHandler:
 					# Write the file back
 					return (self.computer.filesystem.write_file('./__enviro', bytes(json.dumps(env_data), ENCODING))[0], b'')
 
+			elif maincommand == 'move':
+				# Move a file in the filesystem
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+					
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				filedata = exitcode[1]
+
+				# Delete the file
+				exitcode = self.computer.filesystem.delete_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+
+				# Write to the second file
+				if args[1].startswith('/') or args[1].startswith('\\'):
+					# Absolute
+					fullpath = args[1]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[1])
+					
+				# Write to the file
+				return (self.computer.filesystem.write_file(fullpath, filedata)[0], b'')
+
 			return (36, "Illegal command.")
 
 		except Exception as e:
@@ -5221,6 +5253,38 @@ class CMDHandler:
 					del env_data[var_name]
 					# Write the file back
 					return (self.computer.filesystem.write_file('./__enviro', bytes(json.dumps(env_data), ENCODING))[0], b'')
+
+			elif maincommand == 'move':
+				# Move a file in the filesystem
+				# Get full path
+				if args[0].startswith('/') or args[0].startswith('\\'):
+					# Absolute
+					fullpath = args[0]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[0])
+					
+				# Get the file
+				exitcode = self.computer.filesystem.read_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+				filedata = exitcode[1]
+
+				# Delete the file
+				exitcode = self.computer.filesystem.delete_file(fullpath)
+				if exitcode[0] != 0:
+					return exitcode
+
+				# Write to the second file
+				if args[1].startswith('/') or args[1].startswith('\\'):
+					# Absolute
+					fullpath = args[1]
+				else:
+					# Relative
+					fullpath = os.path.join(self.current_working_dir, args[1])
+					
+				# Write to the file
+				return (self.computer.filesystem.write_file(fullpath, filedata)[0], b'')
 
 			return (36, "Illegal command.")
 
