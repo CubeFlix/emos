@@ -654,9 +654,9 @@ class OperatingSystem:
 						self.processes[pid].threads[tid].registers['RBX'].data[0 : 4] = int.to_bytes(self.processes[s_pid].output[0], 4, byteorder='little')
 						exitcode = (0, None)
 			elif syscallid == 25:
-				# Wait for RBX seconds
+				# Wait for RBX milliseconds
 				s_time = int.from_bytes(self.processes[pid].threads[tid].registers['RBX'].get_bytes(0, 4)[1], byteorder='little')
-				time.sleep(s_time)
+				time.sleep(s_time / 1000)
 				exitcode = (0, None)
 			elif syscallid == 26:
 				# Change the current working directory (in the ProcessCMDHandler) with the string defined in RBX and RCX
