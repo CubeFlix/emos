@@ -9,6 +9,7 @@
 import string
 import math
 import os
+import struct
 
 ENCODING = 'utf-8'
 REGISTER_NAMES = ['RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI', 'RIP', 'CS', 'DS', 'SS', 'ES', 'FLAGS', 'R8', 'R9', 'R10', 'R11', 'R12', 'R13', 'R14', 'R15']
@@ -16,8 +17,8 @@ CHARS_HEX = '0123456789abcdefABCDEF'
 CHARS_DEC = '0123456789'
 MNEMONIC_LIST = ['MOV', 'ADD', 'SUB', 'MUL', 'SMUL', 'DIV', 'SDIV', 'AND', 'OR', 'XOR', 'NOT', 'PUSH', 'POP', 'ADDF', 'SUBF', 'MULF', 'SMULF', 'DIVF', 'SDIVF', 'ANDF', 'ORF', 'XORF', 'NOTF', 'JMP', 'CMP', 'SCMP', 'JL', 'JG',
 				 'JE', 'JLE', 'JGE', 'JNE', 'NOP', 'HLT', 'CALL', 'RET', 'SYS', 'POPN', 'PUSHN', 'INFL', 'INT', 'ARGN', 'LIB', 'BSL', 'ASL', 'BSLF', 'ASLF', 'BSR', 'ASR', 'BSRF', 'ASRF', 'EIR', 'ML', 'MG', 'ME', 'MLE', 'MGE', 
-				 'MNE', 'POPR', 'POPNR', 'VARN', 'OFFSG']
-STD_LIBS = ['ISLIB', 'WRITELIB']
+				 'MNE', 'POPR', 'POPNR', 'VARN', 'OFFSG', 'ADDFLOAT', 'SUBFLOAT', 'MULFLOAT', 'DIVFLOAT', 'POWFLOAT', 'CMPFLOAT', 'ITF', 'SITF', 'FTI', 'FTSI']
+STD_LIBS = ['ISLIB', 'WRITELIB', 'FSLIB']
 
 
 class ParseError(Exception):
@@ -377,11 +378,18 @@ class Compiler:
 					current_dec = self.parse_until_non_numeric()
 					current_bit = int.to_bytes(int(current_dec), nbytes, byteorder='little')
 					data += current_bit
-				# Check for a 'XX' bit for 4-bit decimal
+				# Check for a 'XX' bit for 4-byte decimal
 				elif self.scan_chars(2).isnumeric() or (self.scan_chars(2)[0].isnumeric() and not self.scan_chars(2)[1] in ('x', 'd')):
 					# Get the number
 					num = int(self.parse_until_non_numeric())
 					data += int.to_bytes(num, 4, byteorder='little')
+				# Check for a 'f' bit for 4-byte float
+				elif self.scan_char() == 'f':
+					self.next_char()
+					# Get the number
+					current_dec = self.parse_until_non_defined('0123456789.')
+					current_bit = struct.pack('f', float(current_dec))
+					data += current_bit
 				# Check for a opening quotation for a string
 				elif self.scan_char() in ('\'', '"'):
 					# Get the string

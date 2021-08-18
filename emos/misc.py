@@ -14,9 +14,10 @@ import copy
 import pickle
 import shlex
 import os, sys
-import parse
+import emos.parse
 import hashlib
 import json
+import struct
 
 
 # Constants
@@ -142,4 +143,3 @@ except:
 	# Use POSIX
 	import tty, termios
 	getchars = getcharsposix
-	

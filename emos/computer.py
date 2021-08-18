@@ -8,8 +8,8 @@
 
 
 # Imports
-from misc import *
-from memory import *
+from .misc import *
+from .memory import *
 
 
 class FileSystem:

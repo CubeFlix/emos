@@ -8,8 +8,8 @@
 
 
 # Imports
-from misc import *
-from memory import *
+from .misc import *
+from .memory import *
 
 
 class Register:
@@ -98,6 +98,7 @@ class CPUCore:
 
 		self.cpu = cpu
 		self.alu = ALU()
+		self.fpu = FPU()
 
 	def initialize(self, processmemory, name, tid):
 
@@ -1234,6 +1235,221 @@ class CPUCore:
 		# Move the data
 		return self.move(dest, ('mem', (int.to_bytes(offset, 4, byteorder='little'), n)))
 
+	def add_float(self, src0, src1, dest):
+
+		"""Use a floating point add on src0 and src1 and save it to dest.
+		   Args: src0, src1: source tuples to add
+		   		 dest -> destination tuple"""
+
+		# Get source data
+		src0exitcode, src0data = self.get(src0)
+
+		if src0exitcode != 0:
+			return (src0exitcode, src0data)
+
+		src1exitcode, src1data = self.get(src1)
+
+		if src1exitcode != 0:
+			return (src1exitcode, src1data)
+
+		# Preform addition
+		exitcode, answer = self.fpu.add(src0data, src1data)
+		if exitcode != 0:
+			if exitcode == 18:
+				if modflags:
+					self.registers['RFLAGS'].data[0] = 1
+				return (exitcode, answer)
+
+		exitcode, msg = self.set(answer, dest)
+		return (exitcode, msg)
+
+	def sub_float(self, src0, src1, dest):
+
+		"""Use a floating point subtract on src0 and src1 and save it to dest.
+		   Args: src0, src1: source tuples to subtract
+		   		 dest -> destination tuple"""
+
+		# Get source data
+		src0exitcode, src0data = self.get(src0)
+
+		if src0exitcode != 0:
+			return (src0exitcode, src0data)
+
+		src1exitcode, src1data = self.get(src1)
+
+		if src1exitcode != 0:
+			return (src1exitcode, src1data)
+
+		# Preform addition
+		exitcode, answer = self.fpu.sub(src0data, src1data)
+		if exitcode != 0:
+			if exitcode == 18:
+				if modflags:
+					self.registers['RFLAGS'].data[0] = 1
+				return (exitcode, answer)
+
+		exitcode, msg = self.set(answer, dest)
+		return (exitcode, msg)
+
+	def mul_float(self, src0, src1, dest):
+
+		"""Use a floating point multiply on src0 and src1 and save it to dest.
+		   Args: src0, src1: source tuples to multiply
+		   		 dest -> destination tuple"""
+
+		# Get source data
+		src0exitcode, src0data = self.get(src0)
+
+		if src0exitcode != 0:
+			return (src0exitcode, src0data)
+
+		src1exitcode, src1data = self.get(src1)
+
+		if src1exitcode != 0:
+			return (src1exitcode, src1data)
+
+		# Preform addition
+		exitcode, answer = self.fpu.mul(src0data, src1data)
+		if exitcode != 0:
+			if exitcode == 18:
+				if modflags:
+					self.registers['RFLAGS'].data[0] = 1
+				return (exitcode, answer)
+
+		exitcode, msg = self.set(answer, dest)
+		return (exitcode, msg)
+
+	def div_float(self, src0, src1, dest):
+
+		"""Use a floating point divide on src0 and src1 and save it to dest.
+		   Args: src0, src1: source tuples to divide
+		   		 dest -> destination tuple"""
+
+		# Get source data
+		src0exitcode, src0data = self.get(src0)
+
+		if src0exitcode != 0:
+			return (src0exitcode, src0data)
+
+		src1exitcode, src1data = self.get(src1)
+
+		if src1exitcode != 0:
+			return (src1exitcode, src1data)
+
+		# Preform addition
+		exitcode, answer = self.fpu.div(src0data, src1data)
+		if exitcode != 0:
+			if exitcode == 18:
+				if modflags:
+					self.registers['RFLAGS'].data[0] = 1
+				return (exitcode, answer)
+
+		exitcode, msg = self.set(answer, dest)
+		return (exitcode, msg)
+
+	def power_float(self, src0, src1, dest):
+
+		"""Use a floating point divide on src0 and src1 and save it to dest.
+		   Args: src0, src1: source tuples to raise
+		   		 dest -> destination tuple"""
+
+		# Get source data
+		src0exitcode, src0data = self.get(src0)
+
+		if src0exitcode != 0:
+			return (src0exitcode, src0data)
+
+		src1exitcode, src1data = self.get(src1)
+
+		if src1exitcode != 0:
+			return (src1exitcode, src1data)
+
+		# Preform addition
+		exitcode, answer = self.fpu.power(src0data, src1data)
+		if exitcode != 0:
+			if exitcode == 18:
+				if modflags:
+					self.registers['RFLAGS'].data[0] = 1
+				return (exitcode, answer)
+
+		exitcode, msg = self.set(answer, dest)
+		return (exitcode, msg)
+
+	def cmp_float(self, a, b):
+
+		"""Compare a and b as floating point numbers and modify the correct flags.
+		   Args: a -> tuple to a
+		   		 b -> tuple to b"""
+
+		a_int = struct.unpack('f', self.handle_output(self.get(a)))[0]
+		b_int = struct.unpack('f', self.handle_output(self.get(b)))[0]
+
+		self.handle_output(self.registers['RFLAGS'].set_data(b'\x00\x00\x00', 5))
+
+		if a_int < b_int:
+			# a is less than b
+			return self.registers['RFLAGS'].set_data(b'\x01', 5)
+		elif a_int > b_int:
+			# a is larger than b
+			return self.registers['RFLAGS'].set_data(b'\x01', 6)
+		elif a_int == b_int:
+			# a is equal to b
+			return self.registers['RFLAGS'].set_data(b'\x01', 7)
+
+	def int_to_float(self, src, dest):
+
+		"""Convert src as a integer to a floating point number and put it into dest.
+		   Args: src -> tuple to src
+		         dest -> tuple to dest"""
+
+		src_int = int.from_bytes(self.handle_output(self.get(src)), byteorder='little')
+		dest_float = struct.pack('f', float(src_int))
+
+		exitcode, msg = self.set(dest_float, dest)
+		return (exitcode, msg)
+
+	def signed_int_to_float(self, src, dest):
+
+		"""Convert src as a signed integer to a floating point number and put it into dest.
+		   Args: src -> tuple to src
+		         dest -> tuple to dest"""
+
+		src_int = int.from_bytes(self.handle_output(self.get(src)), byteorder='little', signed=True)
+		dest_float = struct.pack('f', float(src_int))
+
+		exitcode, msg = self.set(dest_float, dest)
+		return (exitcode, msg)
+
+	def float_to_int(self, src, dest):
+
+		"""Convert src as a floating point number to an integer and put it into dest.
+		   Args: src -> tuple to src
+		         dest -> tuple to dest"""
+
+		src_float = struct.unpack('f', self.handle_output(self.get(src)))[0]
+		try:
+			dest_int = int.from_bytes(int(src_int), byteorder='little')
+		except Exception as e:
+			return (18, "Overflow error.")
+
+		exitcode, msg = self.set(dest_int, dest)
+		return (exitcode, msg)
+
+	def float_to_signed_int(self, src, dest):
+
+		"""Convert src as a floating point number to an signed integer and put it into dest.
+		   Args: src -> tuple to src
+		         dest -> tuple to dest"""
+
+		src_float = struct.unpack('f', self.handle_output(self.get(src)))[0]
+		try:
+			dest_int = int.from_bytes(int(src_int), byteorder='little', signed=True)
+		except Exception as e:
+			return (18, "Overflow error.")
+
+		exitcode, msg = self.set(dest_int, dest)
+		return (exitcode, msg)
+
 
 	# Dictionary of all opcodes
 	opcode_dict = {0 : (move, 2, {}),
@@ -1297,7 +1513,17 @@ class CPUCore:
 				   58 : (pop_remove, 0, {}),
 				   59 : (popn_remove, 1, {}),
 				   60 : (varn, 2, {}),
-				   61 : (offset_get, 3, {})}
+				   61 : (offset_get, 3, {}),
+				   62 : (add_float, 3, {}),
+				   63 : (sub_float, 3, {}),
+				   64 : (mul_float, 3, {}),
+				   65 : (div_float, 3, {}),
+				   66 : (power_float, 3, {}),
+				   67 : (cmp_float, 2, {}),
+				   68 : (int_to_float, 2, {}),
+				   69 : (signed_int_to_float, 2, {}),
+				   70 : (float_to_int, 2, {}),
+				   71 : (float_to_signed_int, 2, {})}
 
 
 	def inc_rip(self, val):
@@ -1852,6 +2078,114 @@ class ALU:
 	def __str__(self):
 
 		"""Get the string representation of the ALU."""
+
+		return self.__repr__()
+
+
+class FPU:
+
+	"""The floating point logic unit for a CPU."""
+
+	def __init__(self):
+
+		"""Create the FPU."""
+
+		pass
+
+	def add(self, a, b):
+
+		"""Add a and b as floats.
+		   Args: a -> bytearray as the first piece of data to add.
+		   		 b -> bytearray as the second piece of data to add."""
+
+		# Convert bytes into bits
+		a_float = struct.unpack('f', a)[0]
+		b_float = struct.unpack('f', b)[0]
+
+		try:
+			answer = struct.pack('f', a_float + b_float)
+		except OverflowError as e:
+			return (18, "Answer overflow.")
+
+		return (0, answer)
+
+	def sub(self, a, b):
+
+		"""subtract a and b as floats.
+		   Args: a -> bytearray as the first piece of data to subtract.
+		   		 b -> bytearray as the second piece of data to subtract."""
+
+		# Convert bytes into bits
+		a_float = struct.unpack('f', a)[0]
+		b_float = struct.unpack('f', b)[0]
+
+		try:
+			answer = struct.pack('f', a_float - b_float)
+		except OverflowError as e:
+			return (18, "Answer overflow.")
+
+		return (0, answer)
+
+	def mul(self, a, b):
+
+		"""Multiply a and b as floats.
+		   Args: a -> bytearray as the first piece of data to multiply.
+		   		 b -> bytearray as the second piece of data to multiply."""
+
+		# Convert bytes into bits
+		a_float = struct.unpack('f', a)[0]
+		b_float = struct.unpack('f', b)[0]
+
+		try:
+			answer = struct.pack('f', a_float * b_float)
+		except OverflowError as e:
+			return (18, "Answer overflow.")
+
+		return (0, answer)
+
+	def div(self, a, b):
+
+		"""Divide a and b as floats.
+		   Args: a -> bytearray as the first piece of data to divide.
+		   		 b -> bytearray as the second piece of data to divide."""
+
+		# Convert bytes into bits
+		a_float = struct.unpack('f', a)[0]
+		b_float = struct.unpack('f', b)[0]
+
+		try:
+			answer = struct.pack('f', a_float / b_float)
+		except OverflowError as e:
+			return (18, "Answer overflow.")
+
+		return (0, answer)
+
+	def power(self, a, b):
+
+		"""Raise a to the power of b as floats.
+		   Args: a -> bytearray as the first piece of data to raise.
+		   		 b -> bytearray as the second piece of data to raise."""
+
+		# Convert bytes into bits
+		a_float = struct.unpack('f', a)[0]
+		b_float = struct.unpack('f', b)[0]
+
+		try:
+			answer = struct.pack('f', a_float ** b_float)
+		except OverflowError as e:
+			return (18, "Answer overflow.")
+
+		return (0, answer)
+
+	def __repr__(self):
+
+		"""Get the string representation of the FPU."""
+
+		return "<FPU>"
+
+	def __str__(self):
+
+		"""Get the string representation of the FPU."""
 
 		return self.__repr__()
 

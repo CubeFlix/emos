@@ -8,7 +8,7 @@
 
 
 # Imports
-from misc import *
+from .misc import *
 
 
 class MemorySection:

@@ -8,10 +8,10 @@
 
 
 # Imports
-from misc import *
-from memory import *
-from cpu import *
-from computer import *
+from .misc import *
+from .memory import *
+from .cpu import *
+from .computer import *
 
 
 class OperatingSystem:
@@ -44,7 +44,7 @@ class OperatingSystem:
 		self.kernel_stdout = STDOut()
 
 		# System libraries (TODO)
-		self.syslibs = [INT_STR_LIB, WRITELIB]
+		self.syslibs = [INT_STR_LIB, WRITELIB, FLOAT_STR_LIB]
 
 		self.log = ''
 
@@ -1564,7 +1564,7 @@ class ProcessCMDHandler:
 					codefile = str(exitcode[1], ENCODING)
 
 					# Parse and compile the code
-					parser = parse.Compiler(codefile, 'emos', self.computer.operatingsystem, self.current_working_dir)
+					parser = emos.parse.Compiler(codefile, 'emos', self.computer.operatingsystem, self.current_working_dir)
 					parser.parse()
 					parser.compile()
 
@@ -2087,7 +2087,7 @@ class CMDHandler:
 					codefile = str(exitcode[1], ENCODING)
 
 					# Parse and compile the code
-					parser = parse.Compiler(codefile, 'emos', self.computer.operatingsystem, self.current_working_dir)
+					parser = emos.parse.Compiler(codefile, 'emos', self.computer.operatingsystem, self.current_working_dir)
 					parser.parse()
 					parser.compile()
 
@@ -2945,3 +2945,45 @@ class WRITELIB(DynamicLibrary):
 
 		# Return the data
 		return data
+
+
+class FLOAT_STR_LIB(DynamicLibrary):
+
+	defined_calls = [0, 1, 2]
+
+	"""Float and string conversion library."""
+
+	def handle(self, call):
+
+		"""Handle a call.
+		   Args: call -> the call ID to run"""
+
+		if call == 0:
+			# Take an float value from R9, convert it into a decimal string, and put the string into the stack, along with the length of the string in RBX
+			value = struct.unpack('f', self.operatingsystem.processes[self.pid].threads[self.tid].registers['R9'].data[0 : 4])[0]
+			# Get the string representation
+			str_value = bytes(str(value), ENCODING)
+			# Place the string into the stack
+			self.operatingsystem.processes[self.pid].threads[self.tid].stack.push(str_value)
+			# Modify the processes registers
+			self.operatingsystem.processes[self.pid].threads[self.tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.operatingsystem.processes[self.pid].threads[self.tid].stack.data) + self.operatingsystem.processes[self.pid].processmemory.ss, 4, byteorder='little')
+			self.operatingsystem.processes[self.pid].threads[self.tid].registers['RBX'].data[0 : 4] = int.to_bytes(len(str_value), 4, byteorder='little')
+			# Exit code
+			exitcode = (0, None)
+		elif call == 1:
+			# Take a string (offset in R9 and length in R10) and put it's float representation into RBX
+			offset = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R9'].data[0 : 4], byteorder='little')
+			length = int.from_bytes(self.operatingsystem.processes[self.pid].threads[self.tid].registers['R10'].data[0 : 4], byteorder='little')
+			# Get data
+			processmemory_use = self.operatingsystem.processes[self.pid].get_processmemory_thread(self.tid)
+			exitcode, data = processmemory_use.get_bytes(offset, length)
+			if exitcode != 0:
+				exitcode = (exitcode, None)
+			else:
+				# Write the data to the STDOut
+				float_value = float(str(data, ENCODING))
+				self.operatingsystem.processes[self.pid].threads[self.tid].registers['RBX'].data[0 : 4] = struct.pack('f', float_value)
+				exitcode = (0, None)
+
+		self.operatingsystem.update_process_memory_global(self.pid, self.tid)
+		return exitcode
