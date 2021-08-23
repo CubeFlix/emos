@@ -19,6 +19,7 @@ import hashlib
 import json
 import struct
 import numpy as np
+import multiprocessing
 
 
 # Constants

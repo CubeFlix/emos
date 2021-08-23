@@ -41,23 +41,25 @@ class ScreenPeripheral(Peripheral):
 		except Exception as e:
 			pass
 
-		self.pygame = __import__("pygame")
-
-		self.pygame.init()
-
 		# Create the screen peripheral's designed memory
 		self.computer.memory.add_memory_partition(('perp', self.pid), MemorySection('screen_data_' + str(self.pid), 3 * self.width * self.height + (1 + 1 + 2 + 2), bytes(3 * self.width * self.height + (1 + 1 + 2 + 2)))) 
 		# Mouse first button state, Mouse second button state, mouse position X, Mouse position Y
 
 		# Begin the program
 		self.running = True
-		threading.Thread(target=self._run).start()
+		p = multiprocessing.Process(target=self._run)
+		p.daemon = True
+		p.start()
 
 	def _run(self):
 
 		"""Internally run the screen's main loop."""
 
 		try:
+			# Import and initialize Pygame
+			self.pygame = __import__("pygame")
+			self.pygame.init()
+
 			# Create the screen
 			self.screen = self.pygame.display.set_mode((self.width, self.height))
 
