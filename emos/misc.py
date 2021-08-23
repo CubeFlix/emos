@@ -18,6 +18,7 @@ import emos.parse
 import hashlib
 import json
 import struct
+import numpy as np
 
 
 # Constants
@@ -25,6 +26,7 @@ MAXPROCESSMEMORY = 2 ** 32 - 1
 MAXMEMORY = 2 ** 32 - 1
 ENCODING = 'utf-8'
 INVALID_FILENAME_CHARS = ['\n', '\b', '\t', '\r', '"', '\'']
+FILEPATH = os.path.dirname(__file__)
 
 
 class Exit(Exception):

@@ -22,4 +22,7 @@ cid2 = cpu.add_core(core2)
 cmdhandler = CMDHandler('')
 cmdhandler.initialize(computer)
 operatingsystem.set_cmd_handler(cmdhandler)
+screenperipheral = ScreenPeripheral(computer, 1048, 768)
+computer.add_peripheral(screenperipheral)
 computer.start()
+

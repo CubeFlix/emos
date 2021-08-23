@@ -463,7 +463,7 @@ class TerminalScreen(Peripheral):
 
 	"""The terminal screen class."""
 
-	defined_interrupts = [0xe0, 0xe1, 0xe2]
+	defined_interrupts = [0xe0, 0xe1, 0xe2, 0xe3]
 
 	def __init__(self, computer):
 
@@ -485,6 +485,10 @@ class TerminalScreen(Peripheral):
 		
 		# Create the designated memory for the terminal's printout
 		self.computer.memory.add_memory_partition(('perp', self.pid), MemorySection('terminal_perp_' + str(self.pid), self.rows * self.cols + self.rows, bytes(self.rows * self.cols + self.rows)))
+
+		# Set the window title and clear
+		clear()
+		os.system("title [EMOS] TERMINAL_SCREEN_" + str(self.pid))
 
 	def end(self):
 
@@ -522,6 +526,9 @@ class TerminalScreen(Peripheral):
 			# Recalculate RES
 			self.computer.operatingsystem.processes[pid].threads[tid].registers['RES'].data[4 : 8] = int.to_bytes(len(self.computer.operatingsystem.processes[pid].threads[tid].stack.data) + self.computer.operatingsystem.processes[pid].ss, 4, byteorder='little')
 			return (0, None)
+		elif iid == 0xe3:
+			# Get the rows and columns and put it as two 2-byte integers into RBX
+			self.computer.operatingsystem.processes[pid].threads[tid].registers['RAX'].data[0 : 4] = int.to_bytes(self.rows, 2, byteorder='little') + int.to_bytes(self.columns, 2, byteorder='little')
 	
 	def update_screen(self):
 

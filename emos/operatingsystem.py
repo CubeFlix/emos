@@ -1197,6 +1197,10 @@ class OperatingSystem:
 			else:
 				# Incorrect password
 				self.terminal.print_terminal(b'INCORRECT PASSWORD')
+				# Stop all peripherals
+				for peripheral_id, peripheral in self.computer.peripherals.items():
+					peripheral.end()
+					
 				return (39, "Incorrect password.")
 
 		# Start the process main loop
